@@ -19,6 +19,7 @@ namespace DMSxMeadow
 
         private static DressMySlugcat.FancyMenu _currentFancyMenu;
         private static Dictionary<string, DressMySlugcat.Customization> _liveMeadowCustomizations = new Dictionary<string, DressMySlugcat.Customization>();
+        private static DressMySlugcat.Customization _copiedMeadowCustomization;
 
         public static void Initialize()
         {
@@ -123,25 +124,30 @@ namespace DMSxMeadow
                 && slugcatName == _currentFancyMenu.selectedSlugcat
                 && playerNumber == _currentFancyMenu.selectedPlayerIndex)
             {
-                if (!_liveMeadowCustomizations.TryGetValue(slugcatName, out var live))
-                {
-                    live = new DressMySlugcat.Customization
-                    {
-                        Slugcat = slugcatName,
-                        PlayerNumber = playerNumber
-                    };
-                    _liveMeadowCustomizations[slugcatName] = live;
-                }
-
-                if (live.Slugcat != slugcatName)
-                    live.Slugcat = slugcatName;
-                if (live.PlayerNumber != playerNumber)
-                    live.PlayerNumber = playerNumber;
-
-                return live;
+                return GetLiveMeadowCustomization(slugcatName, playerNumber);
             }
 
             return orig(slugcatName, playerNumber, mergeDefaults);
+        }
+
+        private static DressMySlugcat.Customization GetLiveMeadowCustomization(string slugcatName, int playerNumber)
+        {
+            if (!_liveMeadowCustomizations.TryGetValue(slugcatName, out var live))
+            {
+                live = new DressMySlugcat.Customization
+                {
+                    Slugcat = slugcatName,
+                    PlayerNumber = playerNumber
+                };
+                _liveMeadowCustomizations[slugcatName] = live;
+            }
+
+            if (live.Slugcat != slugcatName)
+                live.Slugcat = slugcatName;
+            if (live.PlayerNumber != playerNumber)
+                live.PlayerNumber = playerNumber;
+
+            return live;
         }
 
         private static void Update_Hook(
@@ -314,6 +320,20 @@ namespace DMSxMeadow
             }
 
             if (MeadowProfileManager.IsMeadowModeActive &&
+                (message == "CUST_COPY" || message == "CUST_PASTE" || message == "CUST_DEFAULTS"))
+            {
+                try
+                {
+                    HandleMeadowCopyPasteDefaults(fancyMenu, message);
+                }
+                catch (Exception ex)
+                {
+                    Plugin.Logger.LogError($"Error handling meadow copy/paste/defaults: {ex.Message}");
+                }
+                return;
+            }
+
+            if (MeadowProfileManager.IsMeadowModeActive &&
                 (message.StartsWith("SPRITE_SELECTOR_") ||
                  message.StartsWith("SPRITE_CUSTOMIZER_") ||
                  message == "TAIL_CUSTOMIZER" ||
@@ -336,6 +356,118 @@ namespace DMSxMeadow
             orig(fancyMenu, sender, message);
         }
 
+        private static void HandleMeadowCopyPasteDefaults(DressMySlugcat.FancyMenu fancyMenu, string message)
+        {
+            string slugcat = fancyMenu.selectedSlugcat;
+            int playerNumber = fancyMenu.selectedPlayerIndex;
+            var live = GetLiveMeadowCustomization(slugcat, playerNumber);
+
+            if (message == "CUST_COPY")
+            {
+                _copiedMeadowCustomization = live.Copy();
+                fancyMenu.pasteButton.inactive = false;
+                fancyMenu.PlaySound(SoundID.MENY_Already_Selected_MultipleChoice_Clicked);
+                return;
+            }
+
+            if (message == "CUST_PASTE")
+            {
+                if (_copiedMeadowCustomization == null) return;
+
+                live.CustomTail.Length = _copiedMeadowCustomization.CustomTail.Length;
+                live.CustomTail.Wideness = _copiedMeadowCustomization.CustomTail.Wideness;
+                live.CustomTail.Roundness = _copiedMeadowCustomization.CustomTail.Roundness;
+                live.CustomTail.Lift = _copiedMeadowCustomization.CustomTail.Lift;
+                live.CustomTail.Color = _copiedMeadowCustomization.CustomTail.Color;
+                live.CustomTail.CustTailShape = _copiedMeadowCustomization.CustomTail.CustTailShape;
+                live.CustomTail.AsymTail = _copiedMeadowCustomization.CustomTail.AsymTail;
+
+                live.CustomSprites.Clear();
+                foreach (var s in _copiedMeadowCustomization.CustomSprites)
+                {
+                    live.CustomSprites.Add(new DressMySlugcat.CustomSprite
+                    {
+                        Sprite = s.Sprite,
+                        SpriteSheetID = s.SpriteSheetID,
+                        ColorHex = s.ColorHex,
+                        Enforce = s.Enforce
+                    });
+                }
+
+                fancyMenu.PlaySound(SoundID.MENU_Switch_Page_Out);
+            }
+
+            if (message == "CUST_DEFAULTS")
+            {
+                var defaults = DressMySlugcat.SpriteDefinitions.GetSlugcatDefault(slugcat, playerNumber)?.Copy();
+                live.CustomSprites.Clear();
+
+                if (defaults == null)
+                {
+                    live.CustomTail.AsymTail = false;
+                    live.CustomTail.CustTailShape = false;
+                    live.CustomTail.Color = DressMySlugcat.Utils.DefaultBodyColor(slugcat);
+                }
+                else
+                {
+                    live.CustomTail.Length = defaults.CustomTail.Length;
+                    live.CustomTail.Wideness = defaults.CustomTail.Wideness;
+                    live.CustomTail.Roundness = defaults.CustomTail.Roundness;
+                    live.CustomTail.Lift = defaults.CustomTail.Lift;
+                    live.CustomTail.AsymTail = defaults.CustomTail.AsymTail;
+                    live.CustomTail.CustTailShape = defaults.CustomTail.IsCustom;
+                    live.CustomTail.Color = defaults.CustomTail.Color;
+                }
+
+                fancyMenu.PlaySound(SoundID.MENY_Already_Selected_MultipleChoice_Clicked);
+            }
+
+            try
+            {
+                if (_uiInstances.TryGetValue(fancyMenu, out var ui))
+                {
+                    ui.SaveCurrentProfile();
+                }
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.LogError($"Error auto-saving after meadow customization change: {ex.Message}");
+            }
+
+            RefreshDummyAndControls(fancyMenu);
+        }
+
+        private static void RefreshDummyAndControls(DressMySlugcat.FancyMenu fancyMenu)
+        {
+            try
+            {
+                var dummyField = fancyMenu.GetType()
+                    .GetField("slugcatDummy",
+                        System.Reflection.BindingFlags.Public |
+                        System.Reflection.BindingFlags.Instance);
+
+                var dummy = dummyField?.GetValue(fancyMenu);
+                if (dummy != null)
+                {
+                    var updateMethod = dummy.GetType().GetMethod("UpdateSprites",
+                        System.Reflection.BindingFlags.NonPublic |
+                        System.Reflection.BindingFlags.Instance);
+
+                    updateMethod?.Invoke(dummy, null);
+                }
+
+                var updateControlsMethod = fancyMenu.GetType()
+                    .GetMethod("UpdateControls",
+                        System.Reflection.BindingFlags.Public |
+                        System.Reflection.BindingFlags.Instance);
+                updateControlsMethod?.Invoke(fancyMenu, null);
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.LogError($"Error refreshing dummy: {ex.Message}");
+            }
+        }
+
         public static void Dispose()
         {
             updateHook?.Dispose();
@@ -347,6 +479,7 @@ namespace DMSxMeadow
             _uiInstances.Clear();
             _currentFancyMenu = null;
             _liveMeadowCustomizations.Clear();
+            _copiedMeadowCustomization = null;
         }
     }
 }
