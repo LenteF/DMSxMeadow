@@ -27,9 +27,17 @@ The core of the mod relies on a binary-serialized persistent database (`meadowcu
 ## ⚙️ Compilation Notes
 Target framework: **.NET Framework 4.8**
 Dependencies required for compilation:
-* `Assembly-CSharp.dll`
+* `0Harmony.dll`
 * `BepInEx.dll`
+* `com.rlabrecque.steamworks.net.dll`
+* `DressMySlugcat.dll`
+* `HOOKS-Assembly-CSharp.dll`
+* `Mono.Cecil.dll`
 * `MonoMod.RuntimeDetour.dll`
 * `MonoMod.Utils.dll`
-* `DressMySlugcat.dll`
+* `PUBLIC-Assembly-CSharp.dll`
 * `RainMeadow.dll`
+* `UnityEngine.dll`
+* `UnityEngine.CoreModule.dll`
+* `UnityEngine.IMGUIModule.dll`
+* `UnityEngine.InputLegacyModule`
