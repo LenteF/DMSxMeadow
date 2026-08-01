@@ -1,20 +1,28 @@
-# DressMySlugcatMeadowCompat
+# DMSxMeadow
 
-A **BepInEx code mod** for *Rain World* that resolves the skin-cloning issue between **Dress My Slugcat (DMS)** and **Rain Meadow** by implementing a client-side profile detour.
+A **BepInEx code mod** for *Rain World* that resolves the skin-cloning issue between **Dress My Slugcat (DMS)** and **Rain Meadow** by introducing an isolated client-side profile storage and assignment manager.
 
 
-## Technical Overview
+## Overview
 
 The core problem stems from how `DressMySlugcat.Customization.For(Player, bool)` handles player indices in an online environment. Rain Meadow introduces custom network clones that confuse the native `PlayerNumber` allocation, forcing DMS to fallback to local player states (cloning Player 1's skin onto everyone else) or rendering them incorrectly.
 
-This mod injects a runtime detour via **MonoMod.RuntimeDetour** to hijack `Customization.For()`. Instead of tampering with network entity parameters or rewriting DMS packet replication, it intercepts the client-side rendering pipeline in real-time.
+**DMSxMeadow** addresses this by decoupling DMS profiles from native local player slots. It introduces an internal database system (`MeadowProfileManager`) that manages, persists, and assigns individual DMS customizations to specific Rain Meadow players without modifying the core DMS installation.
 
-### 🛠️ Execution Flow
-1. **Hook Injection:** Intercepts `DressMySlugcat.Customization.For(Player, bool)` using a static `MonoMod` Hook.
-2. **Entity Validation:** Queries `RainMeadow.OnlinePhysicalObject.map` using the player's `abstractCreature` reference to verify if the entity belongs to a remote network client (`!owner.isMe`).
-3. **Database Extraction:** Retrieves the remote user's Steam ID (`owner.id.ToString()`) and cross-references it with a local dictionary populated via a parsing cycle of `dms_meadow_skins.txt`.
-4. **Profile Redirection:** If a match occurs, the hook queries `DressMySlugcat.SaveManager.Customizations` using the configured slot. It sets up an isolated data structure by copying the visual metadata (`.Copy()`) and merging native tail physics and backup sprites from `SpriteDefinitions.GetSlugcatDefault()`.
-5. **Early Return & Fallback:** Forces `PlayerNumber = 0` on the returning instance to bypass local gamepad polling, preventing `NullReferenceException` crashes during network realization. Unmatched clients are safely delegated back to the original method (`orig`).
+## 🛠️ Technical Architecture
+
+### 1. Persistent Profile Manager (`MeadowProfileManager`)
+The core of the mod relies on a binary-serialized persistent database (`meadowcustom.dat`) and an assignment mapping file (`dmsxmeadow.txt`).
+
+* **Internal Offsets & Slot Ranges:** The system uses a fixed offset (`PROFILE_OFFSET = 4`) to isolate custom Meadow profiles from local game options, ensuring profile mappings remain consistent across sessions.
+* **Database & Profile Data:** Customizations are wrapped inside `MeadowProfileData` containers within a central `MedowDatabase` dictionary, tracking updating timestamps, profile numbers, and visual metadata.
+
+### 2. Execution & Detour Flow
+1. **Hook Injection:** Intercepts `DressMySlugcat.Customization.For(Player, bool)` using a `MonoMod` runtime detour.
+2. **Entity Validation:** Queries `RainMeadow.OnlinePhysicalObject.map` using the player's `abstractCreature` reference to verify if the entity belongs to any client (`owner != null`).
+3. **Database Lookups:** Retrieves the player's Steam ID (`owner.id.ToString()`) and queries `MeadowProfileManager` for its corresponding internal profile slot via `dmsxmeadow.txt`.
+4. **Data Redirection:** If ssigned, returns the specific `Customization` stored in `MeadowProfileManager.Database.Profiles`. Forces `PlayerNumber = 0` on the returning instance to bypass local gamepad polling, preventing `NullReferenceException` crashes during realization.
+5. **Fallback:** Unmatched or unassigned clients are safely delegated back to the original method (`orig`).
 
 ## ⚙️ Compilation Notes
 Target framework: **.NET Framework 4.8**
