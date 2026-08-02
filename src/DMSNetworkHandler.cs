@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using BepInEx.Logging;
 using Newtonsoft.Json;
 using RainMeadow;
@@ -9,6 +10,8 @@ namespace DMSxMeadow
     internal static class DMSNetworkHandler
     {
         private static ManualLogSource Logger => Plugin.Logger;
+        private static readonly HashSet<string> SentPlayersForCurrentSkin = new HashSet<string>();
+        private static string lastSentPayload = "";
 
         public class DMSCustomizationDTO
         {
@@ -129,6 +132,7 @@ namespace DMSxMeadow
             {
                 if (OnlineManager.lobby == null || !OnlineManager.lobby.isAvailable)
                 {
+                    ResetNetworkState();
                     Logger.LogWarning("[DMSxMeadow] No se puede emitir la skin: No hay lobby activo.");
                     return;
                 }
@@ -140,13 +144,30 @@ namespace DMSxMeadow
                     return;
                 }
 
+                if (jsonPayload != lastSentPayload)
+                {
+                    lastSentPayload = jsonPayload;
+                    SentPlayersForCurrentSkin.Clear();
+                    Logger.LogInfo("[DMSxMeadow] Detectado cambio de skin local. Reiniciando registro de envíos...");
+                }
+
                 Logger.LogInfo($"[DMSxMeadow] Transmitiendo skin local vía RPC ({jsonPayload.Length} bytes)...");
 
                 string myId = OnlineManager.mePlayer.id.ToString();
+
+                var activePlayerIds = OnlineManager.players.Select(p => p.id.ToString()).ToHashSet();
+                SentPlayersForCurrentSkin.RemoveWhere(id => !activePlayerIds.Contains(id));
+
                 foreach (var onlinePlayer in OnlineManager.players)
                 {
                     if (onlinePlayer.isMe) continue;
+
+                    string targetId = onlinePlayer.id.ToString();
+                    if (SentPlayersForCurrentSkin.Contains(targetId)) continue;
+
                     onlinePlayer.InvokeRPC(RPC_ReceiveCustomization, myId, jsonPayload);
+                    SentPlayersForCurrentSkin.Add(targetId);
+                    Logger.LogInfo($"[DMSxMeadow] Skin transmitida con éxito a '{targetId}'");
                 }
             }
             catch (Exception ex)
@@ -238,6 +259,12 @@ namespace DMSxMeadow
                 }
                 candidateSlot++;
             }
+        }
+
+        public static void ResetNetworkState()
+        {
+            SentPlayersForCurrentSkin.Clear();
+            lastSentPayload = "";
         }
     }
 }
