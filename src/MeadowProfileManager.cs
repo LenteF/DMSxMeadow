@@ -13,6 +13,7 @@ namespace DMSxMeadow
         public int InternalProfileNumber;
         public Dictionary<string, DressMySlugcat.Customization> CustomizationsBySlugcat = new Dictionary<string, DressMySlugcat.Customization>();
         public DateTime LastUpdated = DateTime.Now;
+        public bool IsCache = false;
     }
 
     [Serializable]
