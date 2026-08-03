@@ -20,6 +20,7 @@ namespace DMSxMeadow
         private static DressMySlugcat.FancyMenu _currentFancyMenu;
         private static Dictionary<string, DressMySlugcat.Customization> _liveMeadowCustomizations = new Dictionary<string, DressMySlugcat.Customization>();
         private static DressMySlugcat.Customization _copiedMeadowCustomization;
+        private static System.Reflection.FieldInfo _dmsCopiedCustomizationField;
 
         public static void Initialize()
         {
@@ -319,6 +320,20 @@ namespace DMSxMeadow
                 }
             }
 
+            if (!MeadowProfileManager.IsMeadowModeActive && message == "CUST_COPY")
+            {
+                try
+                {
+                    orig(fancyMenu, sender, message);
+                    _copiedMeadowCustomization = GetDmsCopiedCustomization(fancyMenu)?.Copy();
+                }
+                catch (Exception ex)
+                {
+                    Plugin.Logger.LogError($"Error syncing meadow copy buffer: {ex.Message}");
+                }
+                return;
+            }
+
             if (MeadowProfileManager.IsMeadowModeActive &&
                 (message == "CUST_COPY" || message == "CUST_PASTE" || message == "CUST_DEFAULTS"))
             {
@@ -365,6 +380,7 @@ namespace DMSxMeadow
             if (message == "CUST_COPY")
             {
                 _copiedMeadowCustomization = live.Copy();
+                SetDmsCopiedCustomization(fancyMenu, _copiedMeadowCustomization.Copy());
                 fancyMenu.pasteButton.inactive = false;
                 fancyMenu.PlaySound(SoundID.MENY_Already_Selected_MultipleChoice_Clicked);
                 return;
@@ -372,18 +388,24 @@ namespace DMSxMeadow
 
             if (message == "CUST_PASTE")
             {
-                if (_copiedMeadowCustomization == null) return;
+                var source = _copiedMeadowCustomization ?? GetDmsCopiedCustomization(fancyMenu);
+                if (source == null) return;
 
-                live.CustomTail.Length = _copiedMeadowCustomization.CustomTail.Length;
-                live.CustomTail.Wideness = _copiedMeadowCustomization.CustomTail.Wideness;
-                live.CustomTail.Roundness = _copiedMeadowCustomization.CustomTail.Roundness;
-                live.CustomTail.Lift = _copiedMeadowCustomization.CustomTail.Lift;
-                live.CustomTail.Color = _copiedMeadowCustomization.CustomTail.Color;
-                live.CustomTail.CustTailShape = _copiedMeadowCustomization.CustomTail.CustTailShape;
-                live.CustomTail.AsymTail = _copiedMeadowCustomization.CustomTail.AsymTail;
+                bool keepTargetTailColor = source.CustomTail.Color == DressMySlugcat.Utils.DefaultColorForSprite(source.Slugcat, "TAIL");
+
+                live.CustomTail.Length = source.CustomTail.Length;
+                live.CustomTail.Wideness = source.CustomTail.Wideness;
+                live.CustomTail.Roundness = source.CustomTail.Roundness;
+                live.CustomTail.Lift = source.CustomTail.Lift;
+                live.CustomTail.CustTailShape = source.CustomTail.CustTailShape;
+                live.CustomTail.AsymTail = source.CustomTail.AsymTail;
+                if (!keepTargetTailColor)
+                {
+                    live.CustomTail.Color = source.CustomTail.Color;
+                }
 
                 live.CustomSprites.Clear();
-                foreach (var s in _copiedMeadowCustomization.CustomSprites)
+                foreach (var s in source.CustomSprites)
                 {
                     live.CustomSprites.Add(new DressMySlugcat.CustomSprite
                     {
@@ -435,6 +457,35 @@ namespace DMSxMeadow
             }
 
             RefreshDummyAndControls(fancyMenu);
+        }
+
+        private static DressMySlugcat.Customization GetDmsCopiedCustomization(DressMySlugcat.FancyMenu fancyMenu)
+        {
+            EnsureDmsCopiedCustomizationField();
+            return _dmsCopiedCustomizationField?.GetValue(fancyMenu) as DressMySlugcat.Customization;
+        }
+
+        private static void SetDmsCopiedCustomization(DressMySlugcat.FancyMenu fancyMenu, DressMySlugcat.Customization customization)
+        {
+            EnsureDmsCopiedCustomizationField();
+            _dmsCopiedCustomizationField?.SetValue(fancyMenu, customization);
+        }
+
+        private static void EnsureDmsCopiedCustomizationField()
+        {
+            if (_dmsCopiedCustomizationField != null) return;
+
+            try
+            {
+                _dmsCopiedCustomizationField = typeof(DressMySlugcat.FancyMenu)
+                    .GetField("copiedCustomization",
+                        System.Reflection.BindingFlags.NonPublic |
+                        System.Reflection.BindingFlags.Instance);
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.LogError($"Error getting DMS copiedCustomization field: {ex.Message}");
+            }
         }
 
         private static void RefreshDummyAndControls(DressMySlugcat.FancyMenu fancyMenu)
