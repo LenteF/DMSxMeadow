@@ -1,114 +1,78 @@
-﻿using DressMySlugcat;
-using DressMySlugcat.Hooks;
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using UnityEngine;
 
 namespace DMSxMeadow
 {
     public class Stage0Test : MonoBehaviour
     {
-        private const string TEST_SKIN_PATH = @"C:\Program Files (x86)\Steam\steamapps\common\Rain World\RainWorld_Data\StreamingAssets\mods\hollowknight\dressmyslugcat\The Knight";
-
         private void Update()
         {
             if (Input.GetKeyDown(KeyCode.F5))
             {
-                RunStage0Test();
+                RunFullStage0Test();
             }
         }
 
-        private void RunStage0Test()
+        private void RunFullStage0Test()
         {
             try
             {
+                Plugin.Logger.LogInfo("[DMSxMeadow] === INICIANDO PRUEBA COMPLETA DE ETAPA 0 (F5) ===");
+
                 Player localPlayer = GetLocalPlayer();
-                if (localPlayer == null) return;
-
-                string skinId = "Boombloxxed.Knight"; // Skin de pruebas que he utilizado
-
-                var files = new Dictionary<string, byte[]>();
-                foreach (string filePath in Directory.GetFiles(TEST_SKIN_PATH, "*.*", SearchOption.AllDirectories))
+                if (localPlayer == null) 
                 {
-                    string relativePath = filePath.Substring(TEST_SKIN_PATH.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                    files[relativePath] = File.ReadAllBytes(filePath);
+                    Plugin.Logger.LogWarning("[DMSxMeadow] ⚠️ Debes estar dentro de una partida activa para ejecutar la prueba.");
+                    return;
                 }
 
-                if (SkinRegistration.SaveAndRegisterCacheSkin(skinId, files))
+                HashSet<string> equippedSkinIds = SkinRegistration.GetEquippedSkinIds(localPlayer);
+
+                if (equippedSkinIds.Count == 0)
                 {
-                    ApplySkinToLocalPlayer(localPlayer, skinId);
+                    Plugin.Logger.LogWarning("[DMSxMeadow] ⚠️ El jugador local no tiene ninguna skin custom de DMS equipada (usa la apariencia vanilla).");
+                    return;
                 }
+
+                foreach (string skinId in equippedSkinIds)
+                {
+                    Plugin.Logger.LogInfo($"[DMSxMeadow] 🔍 Skin detectada en el jugador local: '{skinId}'");
+                    Dictionary<string, byte[]> dtoFiles = SkinRegistration.ExportEquippedSkinToDTO(skinId);
+
+                    if (dtoFiles.Count == 0)
+                    {
+                        Plugin.Logger.LogError($"[DMSxMeadow] ❌ No se pudieron leer los archivos para la skin '{skinId}'.");
+                        continue;
+                    }
+
+                    bool success = SkinRegistration.SaveAndRegisterCacheSkin(skinId, dtoFiles);
+
+                    if (success)
+                    {
+                        Plugin.Logger.LogInfo($"[DMSxMeadow] 🎉 ¡ÉXITO! La skin '{skinId}' ha sido leída.");
+                    }
+                }
+
+                Plugin.Logger.LogInfo("[DMSxMeadow] === PRUEBA FINALIZADA CON ÉXITO ===");
             }
             catch (Exception ex)
             {
-                Debug.LogError($"[DMSxMeadow] Error en el test de la Etapa 0: {ex}");
-            }
-        }
-
-        private void ApplySkinToLocalPlayer(Player player, string skinId)
-        {
-            try
-            {
-                string slugcatName = ((ExtEnumBase)player.slugcatStats.name).value;
-                int playerNumber = player.playerState.playerNumber;
-
-                var customization = Customization.For(slugcatName, playerNumber, mergeDefaults: false);
-                if (customization == null)
-                {
-                    customization = new Customization
-                    {
-                        Slugcat = slugcatName,
-                        PlayerNumber = playerNumber
-                    };
-                    SaveManager.Customizations.Add(customization);
-                }
-
-                SpriteSheet injectedSheet = SpriteSheet.Get(skinId);
-                if (injectedSheet != null)
-                {
-                    foreach (string spriteCategory in injectedSheet.AvailableSpriteNames)
-                    {
-                        var customSprite = customization.CustomSprite(spriteCategory, createIfNotExists: true);
-                        customSprite.SpriteSheetID = skinId;
-                        customSprite.Enforce = true;
-                    }
-
-                    Debug.Log($"[DMSxMeadow] Customization de SaveManager actualizada con la skin '{skinId}' para {slugcatName} ({playerNumber}).");
-                }
-
-                if (player.graphicsModule is PlayerGraphics pg)
-                {
-                    if (PlayerGraphicsHooks.PlayerGraphicsData.TryGetValue(pg, out var pgEx))
-                    {
-                        pgEx.Customization = Customization.For(slugcatName, playerNumber, mergeDefaults: true);
-                        pgEx.ScheduleForRecreation = true;
-                        Debug.Log("[DMSxMeadow] ✅ ScheduleForRecreation marcado en el PlayerGraphicsEx del jugador local.");
-                    }
-                    else
-                    {
-                        Debug.LogWarning("[DMSxMeadow] No se encontró el PlayerGraphicsEx del jugador local.");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"[DMSxMeadow] Error al aplicar customización inyectada: {ex}");
+                Plugin.Logger.LogError($"[DMSxMeadow] ❌ Error en el test de la Etapa 0: {ex}");
             }
         }
 
         private Player GetLocalPlayer()
         {
             var rainWorldGame = RWCustom.Custom.rainWorld.processManager.currentMainLoop as RainWorldGame;
-
-            if (rainWorldGame == null || rainWorldGame.Players == null || rainWorldGame.Players.Count == 0)
+            if (rainWorldGame?.Players == null)
             {
                 return null;
             }
 
             foreach (var abstractPlayer in rainWorldGame.Players)
             {
-                if (abstractPlayer != null && abstractPlayer.realizedCreature is Player player)
+                if (abstractPlayer?.realizedCreature is Player player)
                 {
                     return player;
                 }
