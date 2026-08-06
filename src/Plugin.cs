@@ -1,10 +1,8 @@
 ﻿using BepInEx;
 using BepInEx.Logging;
 using System;
-using System.Linq;
 using System.Reflection;
 using MonoMod.RuntimeDetour;
-using UnityEngine;
 
 namespace DMSxMeadow
 {
@@ -23,6 +21,7 @@ namespace DMSxMeadow
         {
             Instance = this;
             Logger = base.Logger;
+            gameObject.AddComponent<Stage0Test>();
 
             try
             {
