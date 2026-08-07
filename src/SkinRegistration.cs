@@ -6,6 +6,7 @@ using DressMySlugcat;
 using DressMySlugcat.Hooks;
 using UnityEngine;
 
+
 namespace DMSxMeadow
 {
     public static class SkinRegistration
@@ -18,6 +19,12 @@ namespace DMSxMeadow
                 return Path.Combine(modsPath, "dmsxmeadow", "dressmyslugcat");
             }
         }
+        public static readonly HashSet<string> NativeDmsSkins = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "dressmyslugcat.default",
+            "dressmyslugcat.empty"
+            // El resto de skins de DMS ya las añadiré
+        };
 
         public static HashSet<string> GetEquippedSkinIds(Player player)
         {
@@ -70,6 +77,8 @@ namespace DMSxMeadow
 
         private static string FindSkinDirectoryOnDisk(string skinId)
         {
+            if (string.IsNullOrEmpty(skinId) || NativeDmsSkins.Contains(skinId)) return null;
+
             List<string> searchRoots = new List<string>();
 
             string localModsPath = Path.Combine(Application.dataPath, "StreamingAssets", "mods");
@@ -232,21 +241,18 @@ namespace DMSxMeadow
             }
         }
 
-        private static bool IsSkinAlreadyInstalled(string skinId)
+        public static bool IsSkinAlreadyInstalled(string skinId)
         {
-            string installedPath = FindSkinDirectoryOnDisk(skinId);
+            if (string.IsNullOrEmpty(skinId)) return false;
+            if (NativeDmsSkins.Contains(skinId)) return true;
 
-            if (string.IsNullOrEmpty(installedPath))
-            {
-                return false;
-            }
+            string installedPath = FindSkinDirectoryOnDisk(skinId);
+            if (string.IsNullOrEmpty(installedPath)) return false;
 
             string normalizedCachePath = Path.GetFullPath(CacheSkinsPath).TrimEnd('\\', '/');
             string normalizedFoundPath = Path.GetFullPath(installedPath).TrimEnd('\\', '/');
 
-            bool isCacheFolder = normalizedFoundPath.StartsWith(normalizedCachePath, StringComparison.OrdinalIgnoreCase);
-
-            return !isCacheFolder;
+            return !normalizedFoundPath.StartsWith(normalizedCachePath, StringComparison.OrdinalIgnoreCase);
         }
     }
 }

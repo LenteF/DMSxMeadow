@@ -22,6 +22,7 @@ namespace DMSxMeadow
             Instance = this;
             Logger = base.Logger;
             gameObject.AddComponent<Stage0Test>();
+            gameObject.AddComponent<DMSNetworkTester>();
 
             try
             {
