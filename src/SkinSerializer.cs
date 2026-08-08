@@ -176,6 +176,10 @@ namespace DMSxMeadow
                         return;
                     }
 
+                    var rainWorldGame = RWCustom.Custom.rainWorld?.processManager?.currentMainLoop as RainWorldGame;
+                    Player localPlayer = rainWorldGame?.Players?.Select(ap => ap?.realizedCreature as Player).FirstOrDefault(p => p != null && (p.abstractCreature.GetOnlineObject()?.isMine ?? false));
+                    if (localPlayer == null) return;
+
                     string jsonCustomization = DMSCustomizationDTO.SerializeLocalCustomization(slugcatName);
                     if (string.IsNullOrEmpty(jsonCustomization))
                     {
@@ -214,7 +218,7 @@ namespace DMSxMeadow
                         string targetId = GetPlayerSteamId(onlinePlayer);
                         if (SentPlayersForCurrentSkin.Contains(targetId)) continue;
 
-                        onlinePlayer.InvokeRPC(RPC_ReceiveHandshake, payloadJson);
+                        onlinePlayer.InvokeRPC(RPC_ReceiveHandshake, OnlineManager.mePlayer, payloadJson);
                         SentPlayersForCurrentSkin.Add(targetId);
                         Plugin.Logger.LogInfo($"[DMSxMeadow] Skin transmitida con éxito a '{targetId}'");
                     }
@@ -226,7 +230,7 @@ namespace DMSxMeadow
             }
 
             [SoftRPCMethod]
-            public static void RPC_ReceiveHandshake(string payloadJson)
+            public static void RPC_ReceiveHandshake(OnlinePlayer sender, string payloadJson)
             {
                 try
                 {
@@ -239,6 +243,7 @@ namespace DMSxMeadow
 
                     Plugin.Logger.LogInfo($"================ [DMSxMeadow RPC HANDSHAKE] ================");
                     Plugin.Logger.LogInfo($" Emisor SteamID : {handshake.SteamId}");
+                    Plugin.Logger.LogInfo($" Emisor Player  : {sender.id}");
                     Plugin.Logger.LogInfo($" Slugcat        : {handshake.Slugcat}");
                     Plugin.Logger.LogInfo($" ShareSkin Bit  : {handshake.ShareSkin}");
                     Plugin.Logger.LogInfo($" Skins usadas   : {(handshake.RequiredSpriteSheetIds.Count > 0 ? string.Join(", ", handshake.RequiredSpriteSheetIds) : "Ninguna (Default)")}");
@@ -251,7 +256,23 @@ namespace DMSxMeadow
                         foreach (var skinId in handshake.RequiredSpriteSheetIds)
                         {
                             bool localExists = SkinRegistration.IsSkinAlreadyInstalled(skinId);
-                            Plugin.Logger.LogInfo($" - Skin '{skinId}': {(localExists ? "Existe localmente (No se pedirá)" : "FALTANTE (Se solicitará vía CustomPacket)")}");
+                            if (localExists)
+                            {
+                                Plugin.Logger.LogInfo($" - Skin '{skinId}': Existe localmente (No se pedirá).");
+                            }
+                            else
+                            {
+                                Plugin.Logger.LogInfo($" - Skin '{skinId}': FALTANTE. Solicitando transmisión a {sender?.id}...");
+
+                                if (sender != null)
+                                {
+                                    SkinTransfer.RequestSkinFromPlayer(sender, skinId);
+                                }
+                                else
+                                {
+                                    Plugin.Logger.LogError($" - Skin '{skinId}': No se pudo solicitar porque sender (RPCManager.currentAuthor) es nulo.");
+                                }
+                            }
                         }
                     }
                     else
@@ -264,6 +285,26 @@ namespace DMSxMeadow
                 catch (Exception ex)
                 {
                     Plugin.Logger.LogError($"[DMSxMeadow] Error procesando RPC_ReceiveHandshake: {ex}");
+                }
+            }
+
+            [SoftRPCMethod]
+            public static void RPC_RequestSkin(OnlinePlayer requester, string skinId)
+            {
+                try
+                {
+                    if (requester == null)
+                    {
+                        Plugin.Logger.LogWarning($"[DMSxMeadow] RPC_RequestSkin recibido pero RPCManager.currentAuthor es nulo.");
+                        return;
+                    }
+
+                    Plugin.Logger.LogInfo($"[DMSxMeadow] El jugador {requester.id} ha solicitado la transmisión de la skin '{skinId}'.");
+                    SkinTransfer.SendSkinToPlayer(requester, skinId);
+                }
+                catch (Exception ex)
+                {
+                    Plugin.Logger.LogError($"[DMSxMeadow] Error al procesar RPC_RequestSkin para skin '{skinId}': {ex}");
                 }
             }
         }

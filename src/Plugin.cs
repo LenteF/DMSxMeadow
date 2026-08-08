@@ -21,7 +21,6 @@ namespace DMSxMeadow
         {
             Instance = this;
             Logger = base.Logger;
-            gameObject.AddComponent<Stage0Test>();
             gameObject.AddComponent<DMSNetworkTester>();
 
             try
@@ -47,6 +46,7 @@ namespace DMSxMeadow
                 MachineConnector.SetRegisteredOI("dmsxmeadow", DMSxMeadowOptions.Instance);
 
                 MeadowProfileManager.Load();
+                SkinTransfer.Initialize();
 
                 InitializeHooks();
                 FancyMenuHookHandler.Initialize();
