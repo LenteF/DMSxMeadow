@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using Menu;
@@ -27,16 +28,68 @@ namespace DMSxMeadow
         private Configurable<string> _searchConfig;
 
         // ============================================================
-        // FLAG DE CONSENTIMIENTO (RF-7 / Capa 0)
+        // FLAG DE CONSENTIMIENTO (RF-7 / Capa 0) — default OFF
         // ============================================================
         private static Configurable<bool> _shareSkinConfig;
-
-        public static bool ShareSkinEnabled => _shareSkinConfig?.Value ?? false;
-
-        public DMSxMeadowOptions()
+        public static bool ShareSkinEnabled
         {
-            _shareSkinConfig = config.Bind<bool>("shareSkin", false, new ConfigurableInfo(
-                "Allow other players to request the skins you have equipped. OFF by default: your skins never leave your machine."));
+            get
+            {
+                // El bind de Remix solo existe si el usuario abrió la config del mod
+                // (Initialize() del OI). Si no, leemos el archivo de config directamente
+                // (ModConfigs/dmsxmeadow.txt) — misma fuente que Remix — para que el
+                // bit del handshake siempre refleje el valor real en disco.
+                if (_shareSkinConfig != null) return _shareSkinConfig.Value;
+                return ReadShareSkinFromFile();
+            }
+        }
+
+        private static bool ReadShareSkinFromFile()
+        {
+            try
+            {
+                string path = Path.Combine(Application.persistentDataPath, "ModConfigs", "dmsxmeadow.txt");
+                if (!File.Exists(path)) return false;
+
+                foreach (string rawLine in File.ReadAllLines(path))
+                {
+                    string line = rawLine.Trim();
+                    if (line.StartsWith("shareSkin", StringComparison.OrdinalIgnoreCase) && line.Contains("="))
+                    {
+                        string value = line.Substring(line.IndexOf('=') + 1).Trim();
+                        if (bool.TryParse(value, out bool parsed))
+                        {
+                            return parsed;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.LogError($"[DMSxMeadow] Error leyendo el flag de compartir del archivo de config: {ex.Message}");
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Bindeo temprano del flag (defensa en profundidad): si el config de Remix ya
+        /// está disponible, lo usa en vez de leer el archivo. Se llama desde OnModsInit.
+        /// </summary>
+        public void EnsureConfigBound()
+        {
+            try
+            {
+                if (_shareSkinConfig == null && this.config != null)
+                {
+                    _shareSkinConfig = this.config.Bind<bool>("shareSkin", false, new ConfigurableInfo(
+                        "Allow other players to request the skins you have equipped. OFF by default: your skins never leave your machine."));
+                    Plugin.Logger.LogInfo($"[DMSxMeadow] Flag de compartir skin cargado temprano (Remix bind): {_shareSkinConfig.Value}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.LogWarning($"[DMSxMeadow] No se pudo bindear temprano el flag de compartir: {ex.Message}");
+            }
         }
 
         // ============================================================
@@ -57,19 +110,22 @@ namespace DMSxMeadow
             base.Initialize();
 
             // ============================================================
-            // TABS
+            // TABS: "Online" (first, shown by default) and "Local"
             // ============================================================
             _onlineTab = new OpTab(this, ONLINE_TAB_NAME);
             _profilesTab = new OpTab(this, LOCAL_TAB_NAME);
             Tabs = new[] { _onlineTab, _profilesTab };
 
+            // Shared layout anchors for both tabs (visual consistency)
             float row1Y = 515f;
             float searchRowOffsetX = -21f;
             float titleY = row1Y + 55f;
 
-            // ============================================================
-            // ONLINE TAB — SHARE SKIN
-            // ============================================================
+            if (_shareSkinConfig == null)
+            {
+                _shareSkinConfig = this.config.Bind<bool>("shareSkin", false, new ConfigurableInfo(
+                    "Allow other players to request the skins you have equipped. OFF by default: your skins never leave your machine."));
+            }
             var onlineTitle = new OpLabel(
                 new Vector2(300f, titleY),
                 new Vector2(),
@@ -100,6 +156,7 @@ namespace DMSxMeadow
                 _searchConfig = this.config.Bind<string>("searchQuery", "", new ConfigurableInfo("Search query"));
             }
 
+            // SECTION TITLE
             var titleLabel = new OpLabel(
                 new Vector2(20f + searchRowOffsetX + 124f, titleY),
                 new Vector2(350f, 20f),
@@ -159,7 +216,7 @@ namespace DMSxMeadow
         }
 
         // ============================================================
-        // HELPER: UNLOAD ELEMENT
+        // HELPER: UNLOAD ELEMENT (elimina gráficos de pantalla)
         // ============================================================
         private void UnloadElement(UIelement element)
         {

@@ -14,10 +14,12 @@ namespace DMSxMeadow
         {
             private static readonly HashSet<string> SentPlayersForCurrentSkin = new HashSet<string>();
             private static string lastSentJsonCustomization = "";
+            private static bool lastSentShareSkin = false;
 
-            // ============================================================
-            // CACHE DE CUSTOMIZACIONES RECIBIDAS (por SteamID -> slugcat)
-            // ============================================================
+            /// <summary>
+            /// Customizaciones recibidas por handshake, indexadas por SteamID del emisor
+            /// y luego por slugcat. H-2: la piel del jugador remoto se aplica aquí.
+            /// </summary>
             private static readonly Dictionary<string, Dictionary<string, DressMySlugcat.Customization>> ReceivedCustomizations =
                 new Dictionary<string, Dictionary<string, DressMySlugcat.Customization>>(StringComparer.Ordinal);
 
@@ -193,16 +195,22 @@ namespace DMSxMeadow
                         return;
                     }
 
-                    if (jsonCustomization != lastSentJsonCustomization)
+                    bool localShareSkin = DMSxMeadowOptions.ShareSkinEnabled;
+
+                    // Re-emitir si cambió la skin O el bit de consentimiento: el handshake
+                    // viaja una sola vez por destinatario, así que si el usuario toca la
+                    // opción ShareSkin después de que el handshake ya salió, el otro
+                    // jugador se quedaría con el bit viejo (bug reportado en pruebas).
+                    if (jsonCustomization != lastSentJsonCustomization || localShareSkin != lastSentShareSkin)
                     {
                         lastSentJsonCustomization = jsonCustomization;
+                        lastSentShareSkin = localShareSkin;
                         SentPlayersForCurrentSkin.Clear();
-                        Plugin.Logger.LogInfo("[DMSxMeadow] Detectado cambio de skin local. Reiniciando registro de envíos...");
+                        Plugin.Logger.LogInfo("[DMSxMeadow] Detectado cambio de skin local o de flag de compartir. Reiniciando registro de envíos...");
                     }
 
                     var dto = JsonConvert.DeserializeObject<DMSCustomizationDTO>(jsonCustomization);
-                    var requiredSkins = dto?.CustomSprites?.Select(s => s.SpriteSheetId).Where(id => !string.IsNullOrEmpty(id) && !SkinRegistration.NativeDmsSkins.Contains(id)).Distinct(StringComparer.OrdinalIgnoreCase).ToList() ?? new List<string>();
-                    bool localShareSkin = DMSxMeadowOptions.ShareSkinEnabled;
+                    var requiredSkins = dto?.CustomSprites?.Select(s => s.SpriteSheetId).Where(id => !string.IsNullOrEmpty(id) && !SkinRegistration.NativeDmsSkins.Contains(id)).Distinct().ToList() ?? new List<string>();
 
                     var handshake = new MeadowHandshakeDTO
                     {
@@ -215,7 +223,6 @@ namespace DMSxMeadow
 
                     string payloadJson = JsonConvert.SerializeObject(handshake);
                     Plugin.Logger.LogInfo($"[DMSxMeadow] Transmitiendo Handshake RPC ({payloadJson.Length} bytes)...");
-                    Plugin.Logger.LogDebug($"[DMSxMeadow] Sala actual: [{string.Join(", ", OnlineManager.players.Select(p => $"{p.id}:{GetPlayerSteamId(p)}"))}]. Enviando a los que falten ({OnlineManager.players.Count(p => !p.isMe && !SentPlayersForCurrentSkin.Contains(GetPlayerSteamId(p)))} nuevos).");
 
                     SentPlayersForCurrentSkin.RemoveWhere(id => !OnlineManager.players.Select(p => GetPlayerSteamId(p)).ToHashSet().Contains(id));
                     foreach (var onlinePlayer in OnlineManager.players)
@@ -276,6 +283,10 @@ namespace DMSxMeadow
                     if (customization != null && !string.IsNullOrEmpty(senderSteamId))
                     {
                         StoreReceivedCustomization(senderSteamId, handshake.Slugcat, customization);
+
+                        // Recrear en caliente el slug remoto: aplica la customización
+                        // recién recibida sin esperar a que cruce una tubería.
+                        Plugin.ScheduleRecreateForSteamId(senderSteamId);
                     }
 
                     if (handshake.ShareSkin)
@@ -317,6 +328,23 @@ namespace DMSxMeadow
                 catch (Exception ex)
                 {
                     Plugin.Logger.LogError($"[DMSxMeadow] Error procesando RPC_ReceiveHandshake: {ex}");
+                }
+            }
+
+            /// <summary>ACK de archivo individual (canal 0, RPC de sesión). Lo manda el
+            /// receptor de un CustomPacket de skin en cuanto lo procesa, para que el emisor
+            /// (SkinTransfer) sepa que no necesita reenviarlo.</summary>
+            [SoftRPCMethod]
+            public static void RPC_AckSkinFile(OnlinePlayer receiver, string skinId, int fileIndex)
+            {
+                try
+                {
+                    if (receiver == null) return;
+                    SkinTransfer.OnFileAcked(receiver, skinId, fileIndex);
+                }
+                catch (Exception ex)
+                {
+                    Plugin.Logger.LogError($"[DMSxMeadow] Error al procesar RPC_AckSkinFile de {receiver?.id} para '{skinId}' [{fileIndex}]: {ex}");
                 }
             }
 

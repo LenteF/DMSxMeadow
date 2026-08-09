@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using DressMySlugcat;
+using DressMySlugcat.Hooks;
 using UnityEngine;
 
 
@@ -10,7 +11,7 @@ namespace DMSxMeadow
 {
     public static class SkinRegistration
     {
-        private static string CacheSkinsPath
+        private static string CacheSkinsPath // Para la release habrá que cambiar el path al de la workshop
         {
             get
             {
@@ -22,11 +23,14 @@ namespace DMSxMeadow
         {
             "dressmyslugcat.default",
             "dressmyslugcat.empty"
+            // El resto de skins de DMS ya las añadiré
         };
 
-        // ============================================================
-        // CACHÉ EN MEMORIA DE SKINS RECIBIDAS (por SteamID del emisor)
-        // ============================================================
+        /// <summary>
+        /// Caché de skins recibidas, agrupada por el SteamID del emisor que las envió.
+        /// Permite saber quién aportó cada skin y limpiar TODO lo de un jugador cuando sale
+        /// de la partida (HandleDisconnect). H-5 parcial: los bytes viven en memoria.
+        /// </summary>
         private static readonly Dictionary<string, Dictionary<string, Dictionary<string, byte[]>>> MemorySkinCacheBySender =
             new Dictionary<string, Dictionary<string, Dictionary<string, byte[]>>>(StringComparer.Ordinal);
 
@@ -43,13 +47,15 @@ namespace DMSxMeadow
 
             if (!MemorySkinCacheBySender.TryGetValue(senderSteamId, out var skinsBySender))
             {
-                skinsBySender = new Dictionary<string, Dictionary<string, byte[]>>(StringComparer.OrdinalIgnoreCase);
+                skinsBySender = new Dictionary<string, Dictionary<string, byte[]>>(StringComparer.Ordinal);
                 MemorySkinCacheBySender[senderSteamId] = skinsBySender;
             }
 
             skinsBySender[skinId] = files;
         }
 
+        /// <summary>Borra de la memoria todo lo aportado por un emisor y su carpeta de caché en
+        /// disco si dejó de estar referenciada por otros jugadores vivos (JcA-float heap).</summary>
         public static int ClearCachedSkinsFor(string senderSteamId)
         {
             int cleared = 0;
@@ -59,9 +65,34 @@ namespace DMSxMeadow
             {
                 cleared = skinsBySender.Count;
                 MemorySkinCacheBySender.Remove(senderSteamId);
+
+                foreach (string skinId in skinsBySender.Keys)
+                {
+                    TryDeleteOrphanedCacheFolder(skinId);
+                }
             }
 
             return cleared;
+        }
+
+        private static void TryDeleteOrphanedCacheFolder(string skinId)
+        {
+            bool stillUsedElsewhere = MemorySkinCacheBySender.Values.Any(v => v.ContainsKey(skinId));
+            if (stillUsedElsewhere) return;
+
+            try
+            {
+                string targetFolder = Path.Combine(CacheSkinsPath, skinId);
+                if (Directory.Exists(targetFolder))
+                {
+                    Directory.Delete(targetFolder, true);
+                    Plugin.Logger.LogInfo($"[DMSxMeadow] 🧹 Carpeta de caché de skin '{skinId}' eliminada (emisor salió y nadie más la usa).");
+                }
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.LogWarning($"[DMSxMeadow] No se pudo borrar la carpeta de caché de '{skinId}': {ex.Message}");
+            }
         }
 
         public static HashSet<string> GetEquippedSkinIds(Player player)
@@ -106,7 +137,7 @@ namespace DMSxMeadow
             var foundFiles = Directory.GetFiles(skinFolder, "*.*", SearchOption.AllDirectories);
             var pngPaths = new List<string>();
 
-            // PASO 1: recolectar los PNG de partes
+            // PASTTA 1: recolectar los PNG de partes (descartando thumbnails/previews/iconos).
             foreach (string filePath in foundFiles)
             {
                 string relativePath = filePath.Substring(skinFolder.Length).TrimStart('\\', '/');
@@ -118,7 +149,7 @@ namespace DMSxMeadow
                 pngPaths.Add(relativePath);
             }
 
-            // PASO 2: PNG con su TXT par + metadata.json
+            // PASO 2: cada PNG con su TXT par (mismo nombre base) + metadata.json como índice.
             foreach (string pngRelative in pngPaths)
             {
                 string pngFull = Path.Combine(skinFolder, pngRelative);
@@ -147,6 +178,7 @@ namespace DMSxMeadow
             return files;
         }
 
+        /// <summary>Archivos de un paquete de skin que NO son partes del slugcat y nunca deben transferirse (thumbnail, preview, iconos, banners).</summary>
         private static bool IsNonPartFile(string fileName)
         {
             string name = Path.GetFileNameWithoutExtension(fileName).ToLowerInvariant();
@@ -207,6 +239,7 @@ namespace DMSxMeadow
 
             foreach (string rootFolder in searchRoots)
             {
+                // Caso A: La ruta del mod tiene carpeta dressmyslugcat directa (improbable)
                 string directDmsPath = Path.Combine(rootFolder, "dressmyslugcat");
                 if (Directory.Exists(directDmsPath))
                 {
@@ -214,6 +247,7 @@ namespace DMSxMeadow
                     if (match != null) return match;
                 }
 
+                // Caso B: Es un contenedor de mods (mods/ o content/312520/)
                 if (Directory.Exists(rootFolder))
                 {
                     foreach (string subDir in Directory.GetDirectories(rootFolder))
@@ -253,6 +287,7 @@ namespace DMSxMeadow
                             skinId.Contains(folderName) ||
                             jsonText.IndexOf(folderName, StringComparison.OrdinalIgnoreCase) >= 0)
                         {
+                            // Verificamos si alguna subcadena del ID coincide con el ID guardado en metadata.json
                             foreach (string part in skinId.Split('.', '_', ' '))
                             {
                                 if (part.Length > 2 && jsonText.Contains($"\"{part}\""))
@@ -285,18 +320,12 @@ namespace DMSxMeadow
                     return true;
                 }
 
-                string targetFolder = GetCacheFolderForSender(senderSteamId);
-                if (string.IsNullOrEmpty(targetFolder))
-                {
-                    Plugin.Logger.LogWarning($"[DMSxMeadow] ⚠️ SteamID del emisor no válido para nombre de carpeta ('{senderSteamId}'). Solo se registra en memoria.");
-                    return true;
-                }
+                string targetFolder = Path.Combine(CacheSkinsPath, skinId);
                 string targetMetadata = Path.Combine(targetFolder, "metadata.json");
 
-                if (Directory.Exists(targetFolder) && File.Exists(targetMetadata) && FolderHoldsSkin(targetFolder, skinId))
+                if (Directory.Exists(targetFolder) && File.Exists(targetMetadata))
                 {
-                    Plugin.Logger.LogWarning($"[DMSxMeadow] ⚡ La skin '{skinId}' ya está en la caché de perfil de {senderSteamId}. Se omite la copia en disco.");
-                    HotLoadAtlases(skinId, targetFolder);
+                    Plugin.Logger.LogWarning($"[DMSxMeadow] ⚡ La skin '{skinId}' ya existe en la caché local. Se omite la copia en disco.");
                     return true;
                 }
 
@@ -319,8 +348,13 @@ namespace DMSxMeadow
                     File.WriteAllBytes(filePath, kvp.Value);
                 }
 
-                Plugin.Logger.LogInfo($"[DMSxMeadow] 💾 Skin '{skinId}' del jugador {senderSteamId} guardada en caché de perfil: {targetFolder}");
-                HotLoadAtlases(skinId, targetFolder);
+                Plugin.Logger.LogInfo($"[DMSxMeadow] 💾 Skin '{skinId}' guardada por primera vez en caché: {targetFolder}");
+                AtlasHooks.ReloadAtlases();
+                Plugin.Logger.LogInfo($"[DMSxMeadow] ✅ AtlasHooks.ReloadAtlases() ejecutado.");
+
+                // La recarga de atlas invalida los sprites ya dibujados (invisible/blanco
+                // hasta recrearse). Recrear todos los slugs realizados, incluido el local.
+                Plugin.ScheduleRecreateAllSlugs();
                 return true;
             }
             catch (Exception ex)
@@ -330,103 +364,10 @@ namespace DMSxMeadow
             }
         }
 
-        private static void HotLoadAtlases(string skinId, string targetFolder)
-        {
-            try
-            {
-                if (string.IsNullOrEmpty(targetFolder) || !Directory.Exists(targetFolder)) return;
-
-                DressMySlugcat.Hooks.AtlasHooks.LoadAtlases(targetFolder);
-                Plugin.Logger.LogInfo($"[DMSxMeadow] 🔄 Atlases de '{skinId}' cargados en caliente y registrados en el catálogo de DMS.");
-            }
-            catch (Exception ex)
-            {
-                Plugin.Logger.LogError($"[DMSxMeadow] No se pudieron cargar los atlases en caliente de '{skinId}': {ex.Message}");
-            }
-        }
-
-        private static string GetCacheFolderForSender(string senderSteamId)
-        {
-            if (string.IsNullOrEmpty(senderSteamId)) return null;
-
-            string normalized = senderSteamId.Trim();
-            if (normalized.Length < 4) return null;
-
-            foreach (char ch in normalized)
-            {
-                if (!char.IsLetterOrDigit(ch) && ch != '_' && ch != '-' && ch != '.')
-                {
-                    return null;
-                }
-            }
-
-            return Path.Combine(CacheSkinsPath, normalized);
-        }
-
-        private static bool FolderHoldsSkin(string folder, string skinId)
-        {
-            try
-            {
-                string metaPath = Path.Combine(folder, "metadata.json");
-                if (!File.Exists(metaPath)) return false;
-
-                string jsonText = File.ReadAllText(metaPath);
-                int idx = jsonText.IndexOf("\"id\"", StringComparison.OrdinalIgnoreCase);
-                if (idx < 0) return false;
-
-                int colon = jsonText.IndexOf(':', idx);
-                int q1 = jsonText.IndexOf('"', colon);
-                int q2 = jsonText.IndexOf('"', q1 + 1);
-                if (colon < 0 || q1 < 0 || q2 < idx) return false;
-
-                string storedId = jsonText.Substring(q1 + 1, q2 - q1 - 1);
-                return storedId.Equals(skinId, StringComparison.OrdinalIgnoreCase);
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        public static void ClearCacheOnStartup()
-        {
-            try
-            {
-                if (!Directory.Exists(CacheSkinsPath)) return;
-
-                int removed = 0;
-                foreach (string dir in Directory.GetDirectories(CacheSkinsPath))
-                {
-                    try
-                    {
-                        Directory.Delete(dir, true);
-                    }
-                    catch (Exception ex)
-                    {
-                        Plugin.Logger.LogWarning($"[DMSxMeadow] No se pudo borrar carpeta de caché antigua '{Path.GetFileName(dir)}': {ex.Message}");
-                    }
-                    removed++;
-                }
-
-                Plugin.Logger.LogInfo($"[DMSxMeadow] 🧹 Caché de skins del arranque anterior borrada en disco ({removed} carpeta(s)). La skin se re-transmitirá al volver a entrar.");
-            }
-            catch (Exception ex)
-            {
-                Plugin.Logger.LogWarning($"[DMSxMeadow] No se pudo completar la limpieza de cachés: {ex.Message}");
-            }
-        }
-
         public static bool IsSkinAlreadyInstalled(string skinId)
         {
             if (string.IsNullOrEmpty(skinId)) return false;
             if (NativeDmsSkins.Contains(skinId)) return true;
-
-            if (DressMySlugcat.Plugin.SpriteSheets != null
-                && DressMySlugcat.Plugin.SpriteSheets.Any(s => s != null && !string.IsNullOrEmpty(s.ID)
-                    && s.ID.Equals(skinId, StringComparison.OrdinalIgnoreCase)))
-            {
-                return true;
-            }
 
             string installedPath = FindSkinDirectoryOnDisk(skinId);
             if (string.IsNullOrEmpty(installedPath)) return false;
