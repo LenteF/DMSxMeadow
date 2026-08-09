@@ -18,7 +18,26 @@ namespace DMSxMeadow
         private bool _searchBySteamId = true;
         private List<ProfileRow> _currentRows = new List<ProfileRow>();
 
+        private const string ONLINE_TAB_NAME = "Online";
+        private const string LOCAL_TAB_NAME = "Local";
+
+        private OpTab _onlineTab;
+        private OpTab _profilesTab;
+
         private Configurable<string> _searchConfig;
+
+        // ============================================================
+        // FLAG DE CONSENTIMIENTO (RF-7 / Capa 0)
+        // ============================================================
+        private static Configurable<bool> _shareSkinConfig;
+
+        public static bool ShareSkinEnabled => _shareSkinConfig?.Value ?? false;
+
+        public DMSxMeadowOptions()
+        {
+            _shareSkinConfig = config.Bind<bool>("shareSkin", false, new ConfigurableInfo(
+                "Allow other players to request the skins you have equipped. OFF by default: your skins never leave your machine."));
+        }
 
         // ============================================================
         // CACHE PARA EL MÉTODO Unload (Reflection)
@@ -36,15 +55,50 @@ namespace DMSxMeadow
         public override void Initialize()
         {
             base.Initialize();
-            var opTab = new OpTab(this, "Meadow Profiles");
-            Tabs = new[] { opTab };
 
             // ============================================================
-            // TÍTULO DE LA SECCIÓN
+            // TABS
             // ============================================================
+            _onlineTab = new OpTab(this, ONLINE_TAB_NAME);
+            _profilesTab = new OpTab(this, LOCAL_TAB_NAME);
+            Tabs = new[] { _onlineTab, _profilesTab };
+
             float row1Y = 515f;
             float searchRowOffsetX = -21f;
             float titleY = row1Y + 55f;
+
+            // ============================================================
+            // ONLINE TAB — SHARE SKIN
+            // ============================================================
+            var onlineTitle = new OpLabel(
+                new Vector2(300f, titleY),
+                new Vector2(),
+                "ONLINE OPTIONS",
+                FLabelAlignment.Center,
+                false
+            );
+            _onlineTab.AddItems(onlineTitle);
+
+            var shareCheckbox = new OpCheckBox(_shareSkinConfig, new Vector2(20f, 440f));
+            _onlineTab.AddItems(shareCheckbox);
+
+            var shareDescription = new OpLabel(
+                new Vector2(52f, 415f),
+                new Vector2(520f, 60f),
+                "Allow other players to see your skin",
+                FLabelAlignment.Left,
+                false
+            );
+            shareDescription.color = new Color(0.65f, 0.65f, 0.65f);
+            _onlineTab.AddItems(shareDescription);
+
+            // ============================================================
+            // LOCAL TAB — LOCAL PROFILE MANAGEMENT
+            // ============================================================
+            if (_searchConfig == null)
+            {
+                _searchConfig = this.config.Bind<string>("searchQuery", "", new ConfigurableInfo("Search query"));
+            }
 
             var titleLabel = new OpLabel(
                 new Vector2(20f + searchRowOffsetX + 124f, titleY),
@@ -53,44 +107,35 @@ namespace DMSxMeadow
                 FLabelAlignment.Center,
                 false
             );
-            opTab.AddItems(titleLabel);
+            _profilesTab.AddItems(titleLabel);
 
-            // ============================================================
-            // FILA SUPERIOR: CAMPO DE BÚSQUEDA + MODO
-            // ============================================================
-
-            if (_searchConfig == null)
-            {
-                _searchConfig = this.config.Bind<string>("searchQuery", "", new ConfigurableInfo("Search query"));
-            }
-
+            // TOP ROW: SEARCH FIELD + MODE
             _searchBox = new OpTextBox(_searchConfig, new Vector2(20f + searchRowOffsetX, row1Y), 200f);
             _searchBox.OnValueChanged += (sender, oldV, newV) => RefreshList();
-            opTab.AddItems(_searchBox);
+            _profilesTab.AddItems(_searchBox);
 
             _modeButton = new OpSimpleButton(
                 new Vector2(230f + searchRowOffsetX, row1Y),
                 new Vector2(140f, 24f),
-                _searchBySteamId ? "Buscar: Player ID" : "Buscar: Perfil #"
+                _searchBySteamId ? "Player ID" : "Profile #"
             );
             _modeButton.OnClick += (_) =>
             {
                 _searchBySteamId = !_searchBySteamId;
-                _modeButton.text = _searchBySteamId ? "Buscar: Player ID" : "Buscar: Perfil #";
+                _modeButton.text = _searchBySteamId ? "Player ID" : "Profile #";
                 RefreshList();
             };
-            opTab.AddItems(_modeButton);
+            _profilesTab.AddItems(_modeButton);
 
-            // ============================================================
             // SCROLL BOX DE PERFILES
-            // ============================================================
             float scrollY = 30f;
             float scrollHeight = 460f;
-            
+            float contentHeight = 100f;
+
             _scrollBox = new OpScrollBox(
                 new Vector2(0f, scrollY),
                 new Vector2(600f, scrollHeight),
-                100f,
+                contentHeight,
                 false,
                 true,
                 true
@@ -100,7 +145,7 @@ namespace DMSxMeadow
                 colorFill = MenuColorEffect.rgbBlack,
                 fillAlpha = 0.3f
             };
-            opTab.AddItems(_scrollBox);
+            _profilesTab.AddItems(_scrollBox);
 
             if (_unloadMethod == null)
             {
@@ -108,15 +153,13 @@ namespace DMSxMeadow
                     BindingFlags.NonPublic | BindingFlags.Instance);
             }
 
-            // ============================================================
             // LIMPIEZA AUTOMÁTICA DE HUÉRFANOS
-            // ============================================================
             MeadowProfileManager.DeleteOrphanProfiles();
             RefreshList();
         }
 
         // ============================================================
-        // HELPER: UNLOAD ELEMENT (elimina gráficos de pantalla)
+        // HELPER: UNLOAD ELEMENT
         // ============================================================
         private void UnloadElement(UIelement element)
         {
@@ -161,13 +204,11 @@ namespace DMSxMeadow
                 // 3. FILTRAR Y CONTAR
                 // ============================================================
                 var matchingProfiles = new List<(int num, string steamId, bool orphan)>();
-                int assigned = 0, orphans = 0;
 
                 foreach (int p in allProfiles)
                 {
                     string sid = MeadowProfileManager.GetSteamID(p);
                     bool isOrphan = string.IsNullOrEmpty(sid);
-                    if (isOrphan) orphans++; else assigned++;
 
                     bool matches = !hasQuery || (_searchBySteamId
                         ? sid.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0
@@ -194,8 +235,8 @@ namespace DMSxMeadow
                 foreach (var (profileNum, steamId, isOrphan) in matchingProfiles)
                 {
                     string display = isOrphan
-                        ? $"Perfil {profileNum}  [huérfano]"
-                        : $"Perfil {profileNum}  {steamId}";
+                        ? $"Profile {profileNum}  [orphan]"
+                        : $"Profile {profileNum}  {steamId}";
 
                     var label = new OpLabel(10f, y, display, false);
                     if (isOrphan)
@@ -206,7 +247,7 @@ namespace DMSxMeadow
                     var deleteBtn = new OpSimpleButton(
                         new Vector2(350f, y - 3f),
                         new Vector2(70f, 22f),
-                        "Eliminar"
+                        "Delete"
                     );
 
                     int capturedNum = profileNum;
@@ -229,11 +270,6 @@ namespace DMSxMeadow
                 // ============================================================
                 _scrollBox.SetContentSize(contentHeight, true);
                 _scrollBox.MarkDirty();
-
-                // ============================================================
-                // 8. ACTUALIZAR ESTADÍSTICAS
-                // ============================================================
-                Tabs[0].name = $"Meadow Profiles  ({allProfiles.Count} total, {assigned} asignados, {orphans} huérfanos)";
             }
             catch (Exception ex)
             {

@@ -13,7 +13,6 @@ namespace DMSxMeadow
         public int InternalProfileNumber;
         public Dictionary<string, DressMySlugcat.Customization> CustomizationsBySlugcat = new Dictionary<string, DressMySlugcat.Customization>();
         public DateTime LastUpdated = DateTime.Now;
-        public bool IsCache = false;
     }
 
     [Serializable]
@@ -330,7 +329,6 @@ namespace DMSxMeadow
         // ============================================================
         // MÉTODOS PARA EL MENÚ REMIX
         // ============================================================
-
         public static List<int> GetAllProfileNumbers()
         {
             var result = new HashSet<int>();

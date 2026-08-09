@@ -72,17 +72,12 @@ namespace DMSxMeadow
                 }
 
                 // ============================================================
-                // POSICIONAMIENTO RESPONSIVO A RESOLUCIÓN
-                // ============================================================
-                // textBoxBorder.pos.x YA incluye leftAnchor.
-                // NO restamos leftAnchor para que el desplazamiento se mantenga.
+                // POSICIONAMIENTO
                 // ============================================================
                 float baseStartX = textBoxBorder.pos.x + (65f * playerCount) + 10f;
 
                 // ============================================================
-                // LIMITACIÓN DE SEGURIDAD: evitar invadir el área de los botones
-                // de control de DMS (reset/defaults/copy/paste) que se anclan
-                // al borde derecho de la caja en resoluciones angostas.
+                // LIMITACIÓN DE SEGURIDAD (botones de control de DMS)
                 // ============================================================
                 float maxSafeX = textBoxBorder.pos.x + textBoxBorder.size.x - 260f;
                 baseStartX = Mathf.Min(baseStartX, maxSafeX);
@@ -94,15 +89,13 @@ namespace DMSxMeadow
                 baseStartX += positionOffsetX;
 
                 // ============================================================
-                // FILA PROPIA: Y = -80f (debajo de Player buttons, lejos de
-                // los botones de control en Y = +20f)
+                // FILA PROPIA (Y)
                 // ============================================================
                 float baseYPos = textBoxBorder.pos.y - 75f;
 
                 // ============================================================
                 // CREACIÓN DE UI
                 // ============================================================
-
                 _tabWrapper = new MenuTabWrapper(_fancyMenu, _fancyMenu.pages[0]);
                 _fancyMenu.pages[0].subObjects.Add(_tabWrapper);
 
@@ -606,7 +599,7 @@ namespace DMSxMeadow
         }
 
         // ============================================================
-        // Manejo de Ctrl+V para pegar desde portapapeles
+        // Ctrl+V PARA PEGAR DESDE PORTAPAPELES
         // ============================================================
         public void CheckPasteInput()
         {
