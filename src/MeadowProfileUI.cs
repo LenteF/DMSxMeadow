@@ -22,8 +22,6 @@ namespace DMSxMeadow
 
         private bool _profileFieldWasHeld = false;
         private bool _steamFieldWasHeld = false;
-        private string _lastConfirmedSteamId = "";
-        private string _lastConfirmedProfileNumber = "";
         private string _pendingProfileInput = "1";
         private string _lastKnownSlugcat = "";
 
@@ -302,9 +300,6 @@ namespace DMSxMeadow
 
             string steamId = MeadowProfileManager.GetSteamID(profileNumber);
             _steamIdField.value = string.IsNullOrEmpty(steamId) ? "unassigned" : steamId;
-
-            _lastConfirmedSteamId = steamId;
-            _lastConfirmedProfileNumber = profileNumber.ToString();
         }
 
         public void SaveCurrentProfile()
@@ -460,7 +455,6 @@ namespace DMSxMeadow
                     if (cleanValue != currentSteamId)
                     {
                         MeadowProfileManager.SetSteamID(MeadowProfileManager.CurrentProfileNumber, cleanValue);
-                        _lastConfirmedSteamId = cleanValue;
 
                         if (!string.IsNullOrEmpty(cleanValue))
                         {
@@ -528,9 +522,6 @@ namespace DMSxMeadow
             string steamId = MeadowProfileManager.GetSteamID(profileNumber);
             _steamIdField.value = string.IsNullOrEmpty(steamId) ? "unassigned" : steamId;
 
-            _lastConfirmedSteamId = steamId;
-            _lastConfirmedProfileNumber = profileNumber.ToString();
-
             _lastKnownSlugcat = _fancyMenu.selectedSlugcat;
             LoadProfile(profileNumber);
 
@@ -550,8 +541,6 @@ namespace DMSxMeadow
             _steamIdField.greyedOut = true;
             _profileSetButton.inactive = true;
 
-            _lastConfirmedSteamId = "";
-            _lastConfirmedProfileNumber = "";
             _profileFieldWasHeld = false;
             _steamFieldWasHeld = false;
             _lastKnownSlugcat = "";
@@ -593,8 +582,6 @@ namespace DMSxMeadow
             _steamIdField.greyedOut = true;
             _profileSetButton.inactive = true;
 
-            _lastConfirmedSteamId = "";
-            _lastConfirmedProfileNumber = "";
             _profileFieldWasHeld = false;
             _steamFieldWasHeld = false;
             _lastKnownSlugcat = "";

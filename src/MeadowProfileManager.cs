@@ -429,38 +429,6 @@ namespace DMSxMeadow
             }
         }
 
-        public static bool ProfileExists(int displayNumber)
-        {
-            try
-            {
-                int internalNum = GetInternalProfile(displayNumber);
-                if (Database.Profiles != null && Database.Profiles.ContainsKey(internalNum))
-                {
-                    return true;
-                }
-
-                if (_unsavedProfiles.ContainsKey(displayNumber))
-                {
-                    return true;
-                }
-
-                LoadAssignments();
-                foreach (var kvp in _assignments)
-                {
-                    if (kvp.Value == displayNumber)
-                    {
-                        return true;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Plugin.Logger.LogError($"Error checking profile existence: {ex.Message}");
-            }
-
-            return false;
-        }
-
         public static int DeleteOrphanProfiles()
         {
             int deleted = 0;

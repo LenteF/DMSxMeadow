@@ -260,34 +260,6 @@ namespace DMSxMeadow
             }
         }
 
-        public static HashSet<string> GetEquippedSkinIds(Player player)
-        {
-            HashSet<string> equippedSkins = new HashSet<string>();
-
-            if (player?.playerState == null)
-            {
-                return equippedSkins;
-            }
-
-            string slugcatName = ((ExtEnumBase)player.slugcatStats.name).value;
-            int playerNumber = player.playerState.playerNumber;
-
-            Customization customization = SaveManager.Customizations.FirstOrDefault(x => x.Matches(slugcatName, playerNumber));
-
-            if (customization != null && customization.CustomSprites != null)
-            {
-                foreach (CustomSprite customSprite in customization.CustomSprites)
-                {
-                    if (customSprite != null && !string.IsNullOrEmpty(customSprite.SpriteSheetID) && !customSprite.SpriteSheetID.Equals(SpriteSheet.DefaultName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        equippedSkins.Add(customSprite.SpriteSheetID);
-                    }
-                }
-            }
-
-            return equippedSkins;
-        }
-
         public static Dictionary<string, byte[]> ExportEquippedSkinToDTO(string skinId)
         {
             var files = new Dictionary<string, byte[]>();

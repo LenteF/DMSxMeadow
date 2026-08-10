@@ -415,7 +415,7 @@ namespace DMSxMeadow
                     if (absPlayer?.realizedCreature is not Player player) continue;
 
                     if (!RainMeadow.OnlinePhysicalObject.map.TryGetValue(absPlayer, out var onlineEntity)) continue;
-                    if (!string.Equals(SteamIdFromOwner(onlineEntity.owner), steamId, StringComparison.Ordinal)) continue;
+                    if (!string.Equals(DMSNetworkTester.SkinSerializer.GetPlayerSteamId(onlineEntity.owner), steamId, StringComparison.Ordinal)) continue;
 
                     foundSlug = true;
                     if (ScheduleRecreationFor(player, steamId))
@@ -441,18 +441,6 @@ namespace DMSxMeadow
                 Logger.LogError($"Error al programar recreación para {steamId}: {ex.Message}");
                 return true;
             }
-        }
-
-        private static string SteamIdFromOwner(RainMeadow.OnlinePlayer owner)
-        {
-            if (owner == null || owner.id == null) return null;
-
-            if (owner.id is RainMeadow.SteamMatchmakingManager.SteamPlayerId steamPlayerId)
-            {
-                return steamPlayerId.steamID.m_SteamID.ToString();
-            }
-
-            return owner.id.ToString();
         }
 
         private static DressMySlugcat.Customization Customization_For_Hook(

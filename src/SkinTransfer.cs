@@ -427,15 +427,6 @@ namespace DMSxMeadow
             Plugin.Logger.LogInfo("[DMSxMeadow] 🧹 Transferencias pendientes y recepciones incompletas purgadas (sesión terminada).");
         }
 
-        public static void ForgetAllPlayers()
-        {
-            IncomingTransfers.Clear();
-            OutgoingQueue.Clear();
-            InFlightFiles.Clear();
-            TransfersRemaining.Clear();
-            PendingRequests.Clear();
-        }
-
         private static void OnChunkReceived(OnlinePlayer sender, string skinId, string fileName, byte[] fileBytes, int fileIndex, int totalFiles)
         {
             MarkRequestSatisfied(sender, skinId);
