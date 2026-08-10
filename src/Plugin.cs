@@ -157,7 +157,7 @@ namespace DMSxMeadow
                 if (OnlineManager.lobby == null || !OnlineManager.lobby.isAvailable) return;
 
                 string slugcatName = playerGraphics.player.slugcatStats.name.value;
-                DMSNetworkTester.SkinSerializer.BroadcastHandshake(slugcatName);
+                SkinSerializer.BroadcastHandshake(slugcatName);
             }
             catch (Exception ex)
             {
@@ -192,7 +192,7 @@ namespace DMSxMeadow
                 if (string.IsNullOrEmpty(slugcatName)) return;
 
                 Plugin.Logger.LogInfo($"[DMSxMeadow] Jugador {player.id} entró a la sala. Re-emitiendo handshake local hacia él...");
-                DMSNetworkTester.SkinSerializer.BroadcastHandshake(slugcatName);
+                SkinSerializer.BroadcastHandshake(slugcatName);
             }
             catch (Exception ex)
             {
@@ -216,11 +216,11 @@ namespace DMSxMeadow
             {
                 if (player == null) return;
 
-                string steamId = DMSNetworkTester.SkinSerializer.GetPlayerSteamId(player);
+                string steamId = SkinSerializer.GetPlayerSteamId(player);
                 if (string.IsNullOrEmpty(steamId)) return;
 
                 int clearedSkins = SkinRegistration.ClearCachedSkinsFor(steamId);
-                DMSNetworkTester.SkinSerializer.ForgetPlayer(steamId);
+                SkinSerializer.ForgetPlayer(steamId);
                 SkinTransfer.ForgetPlayer(player);
 
                 Plugin.Logger.LogInfo($"[DMSxMeadow] Jugador {player.id} salió. Limpieza: {clearedSkins} skin(s) de caché de memoria, transferencias y registro de envíos purgados.");
@@ -305,7 +305,7 @@ namespace DMSxMeadow
             int scheduled = 0;
             foreach (var player in OnlineManager.players)
             {
-                string steamId = DMSNetworkTester.SkinSerializer.GetPlayerSteamId(player);
+                string steamId = SkinSerializer.GetPlayerSteamId(player);
                 if (string.IsNullOrEmpty(steamId)) continue;
 
                 if (TryRecreateFromCache(steamId))
@@ -366,7 +366,7 @@ namespace DMSxMeadow
                     if (absPlayer?.realizedCreature is not Player player) continue;
 
                     if (!RainMeadow.OnlinePhysicalObject.map.TryGetValue(absPlayer, out var onlineEntity)) continue;
-                    if (!string.Equals(SteamIdFromOwner(onlineEntity.owner), steamId, StringComparison.Ordinal)) continue;
+                    if (!string.Equals(SkinSerializer.GetPlayerSteamId(onlineEntity.owner), steamId, StringComparison.Ordinal)) continue;
 
                     foundSlug = true;
                     if (ScheduleRecreationFor(player, steamId))
@@ -392,18 +392,6 @@ namespace DMSxMeadow
                 Logger.LogError($"Error al programar recreación para {steamId}: {ex.Message}");
                 return true;
             }
-        }
-
-        private static string SteamIdFromOwner(RainMeadow.OnlinePlayer owner)
-        {
-            if (owner == null || owner.id == null) return null;
-
-            if (owner.id is RainMeadow.SteamMatchmakingManager.SteamPlayerId steamPlayerId)
-            {
-                return steamPlayerId.steamID.m_SteamID.ToString();
-            }
-
-            return owner.id.ToString();
         }
 
         private static DressMySlugcat.Customization Customization_For_Hook(
@@ -450,7 +438,7 @@ namespace DMSxMeadow
                             var customization = MeadowProfileManager.GetCustomizationBySteamID(steamId, slugcatName);
                             if (customization == null)
                             {
-                                customization = DMSNetworkTester.SkinSerializer.GetReceivedCustomization(steamId, slugcatName);
+                                customization = SkinSerializer.GetReceivedCustomization(steamId, slugcatName);
                             }
 
                             if (customization != null)

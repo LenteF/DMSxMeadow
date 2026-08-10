@@ -74,16 +74,30 @@ namespace DMSxMeadow
             public bool AnyFileReceived;
         }
 
-        private static readonly Dictionary<string, PendingRequest> PendingRequests =
-            new Dictionary<string, PendingRequest>(StringComparer.Ordinal);
+        private static readonly Dictionary<RequestKey, PendingRequest> PendingRequests =
+            new Dictionary<RequestKey, PendingRequest>();
 
-        private static string RequestKey(string targetUniqueId, string skinId) => $"{targetUniqueId}_{skinId}";
+        private readonly struct RequestKey : IEquatable<RequestKey>
+        {
+            public readonly string TargetUniqueId;
+            public readonly string SkinId;
 
+            public RequestKey(string targetUniqueId, string skinId)
+            {
+                TargetUniqueId = targetUniqueId ?? string.Empty;
+                SkinId = skinId ?? string.Empty;
+            }
+
+            public bool Equals(RequestKey other) =>
+                TargetUniqueId == other.TargetUniqueId && SkinId == other.SkinId;
+            public override bool Equals(object obj) => obj is RequestKey other && Equals(other);
+            public override int GetHashCode() => HashCode.Combine(TargetUniqueId, SkinId);
+        }
         public static void RequestSkinFromPlayer(OnlinePlayer targetPlayer, string skinId)
         {
             if (targetPlayer == null || string.IsNullOrEmpty(skinId)) return;
 
-            string key = RequestKey(targetPlayer.GetUniqueID(), skinId);
+            var key = new RequestKey(targetPlayer.GetUniqueID(), skinId);
             if (!PendingRequests.TryGetValue(key, out var pending))
             {
                 pending = new PendingRequest { Target = targetPlayer, SkinId = skinId };
@@ -95,7 +109,7 @@ namespace DMSxMeadow
             pending.AnyFileReceived = false;
 
             Plugin.Logger.LogInfo($"[DMSxMeadow] Solicitando skin '{skinId}' al jugador {targetPlayer.id}... (intento {pending.Attempts}/{MaxRequestAttempts})");
-            targetPlayer.InvokeRPC(DMSNetworkTester.SkinSerializer.RPC_RequestSkin, OnlineManager.mePlayer, skinId);
+            targetPlayer.InvokeRPC(SkinSerializer.RPC_RequestSkin, OnlineManager.mePlayer, skinId);
         }
 
         /// <summary>Se llama cada Update. Reintenta peticiones que no han recibido NINGÚN
@@ -105,7 +119,7 @@ namespace DMSxMeadow
         {
             if (PendingRequests.Count == 0) return;
 
-            var toRemove = new List<string>();
+            var toRemove = new List<RequestKey>();
             var toRetry = new List<PendingRequest>();
 
             foreach (var kvp in PendingRequests)
@@ -125,7 +139,7 @@ namespace DMSxMeadow
                 toRetry.Add(pending);
             }
 
-            foreach (string key in toRemove) PendingRequests.Remove(key);
+            foreach (RequestKey key in toRemove) PendingRequests.Remove(key);
 
             foreach (var pending in toRetry)
             {
@@ -136,7 +150,7 @@ namespace DMSxMeadow
 
         private static void MarkRequestSatisfied(OnlinePlayer sender, string skinId)
         {
-            string key = RequestKey(sender.GetUniqueID(), skinId);
+            var key = new RequestKey(sender.GetUniqueID(), skinId);
             if (PendingRequests.TryGetValue(key, out var pending))
             {
                 pending.AnyFileReceived = true;
@@ -162,21 +176,37 @@ namespace DMSxMeadow
         private static readonly Queue<OutgoingFile> OutgoingQueue = new Queue<OutgoingFile>();
 
         // clave = "{targetUniqueId}_{skinId}_{fileIndex}"
-        private static readonly Dictionary<string, OutgoingFile> InFlightFiles =
-            new Dictionary<string, OutgoingFile>(StringComparer.Ordinal);
+        private static readonly Dictionary<FileKey, OutgoingFile> InFlightFiles =
+            new Dictionary<FileKey, OutgoingFile>();
 
         // clave = "{targetUniqueId}_{skinId}" -> archivos que faltan por confirmar o mandar
-        private static readonly Dictionary<string, int> TransfersRemaining =
-            new Dictionary<string, int>(StringComparer.Ordinal);
+        private static readonly Dictionary<RequestKey, int> TransfersRemaining =
+            new Dictionary<RequestKey, int>();
 
-        private static string FileKey(string targetUniqueId, string skinId, int fileIndex) =>
-            $"{targetUniqueId}_{skinId}_{fileIndex}";
+        private readonly struct FileKey : IEquatable<FileKey>
+        {
+            public readonly string TargetUniqueId;
+            public readonly string SkinId;
+            public readonly int FileIndex;
+
+            public FileKey(string targetUniqueId, string skinId, int fileIndex)
+            {
+                TargetUniqueId = targetUniqueId ?? string.Empty;
+                SkinId = skinId ?? string.Empty;
+                FileIndex = fileIndex;
+            }
+
+            public bool Equals(FileKey other) =>
+                TargetUniqueId == other.TargetUniqueId && SkinId == other.SkinId && FileIndex == other.FileIndex;
+            public override bool Equals(object obj) => obj is FileKey other && Equals(other);
+            public override int GetHashCode() => HashCode.Combine(TargetUniqueId, SkinId, FileIndex);
+        }
 
         public static void SendSkinToPlayer(OnlinePlayer requester, string skinId)
         {
             if (requester == null || string.IsNullOrEmpty(skinId)) return;
 
-            string transferKey = RequestKey(requester.GetUniqueID(), skinId);
+            var transferKey = new RequestKey(requester.GetUniqueID(), skinId);
             if (TransfersRemaining.ContainsKey(transferKey))
             {
                 Plugin.Logger.LogInfo($"[DMSxMeadow] Ya hay una transferencia de '{skinId}' en curso hacia {requester.id}; se ignora la petición duplicada (probablemente un reintento del solicitante).");
@@ -294,7 +324,7 @@ namespace DMSxMeadow
             var packet = new CustomPacket(PacketKey, file.PacketBytes, (ushort)file.PacketBytes.Length);
             OnlineManager.SendCustomData(file.Target, packet, NetIO.SendType.Reliable);
 
-            InFlightFiles[FileKey(file.Target.GetUniqueID(), file.SkinId, file.FileIndex)] = file;
+            InFlightFiles[new FileKey(file.Target.GetUniqueID(), file.SkinId, file.FileIndex)] = file;
             _nextSendAllowedTime = Time.time + SendIntervalSeconds;
         }
 
@@ -302,18 +332,18 @@ namespace DMSxMeadow
         public static void OnFileAcked(OnlinePlayer fromPlayer, string skinId, int fileIndex)
         {
             if (fromPlayer == null) return;
-            string key = FileKey(fromPlayer.GetUniqueID(), skinId, fileIndex);
+            var key = new FileKey(fromPlayer.GetUniqueID(), skinId, fileIndex);
             if (InFlightFiles.TryGetValue(key, out var file))
             {
                 CompleteOneFile(key, file);
             }
         }
 
-        private static void CompleteOneFile(string fileKey, OutgoingFile file)
+        private static void CompleteOneFile(FileKey fileKey, OutgoingFile file)
         {
             InFlightFiles.Remove(fileKey);
 
-            string transferKey = RequestKey(file.Target.GetUniqueID(), file.SkinId);
+            var transferKey = new RequestKey(file.Target.GetUniqueID(), file.SkinId);
             if (TransfersRemaining.TryGetValue(transferKey, out int remaining))
             {
                 remaining--;
@@ -354,7 +384,7 @@ namespace DMSxMeadow
                     // ACK inmediato: RPC de sesión (canal 0), fiable por el reintento nativo
                     // de Rain Meadow — no depende del filtro de CustomClientSettings porque
                     // los RPC de sesión no pasan por ese chequeo.
-                    fromPlayer.InvokeRPC(DMSNetworkTester.SkinSerializer.RPC_AckSkinFile, OnlineManager.mePlayer, skinId, fileIndex);
+                    fromPlayer.InvokeRPC(SkinSerializer.RPC_AckSkinFile, OnlineManager.mePlayer, skinId, fileIndex);
                 }
             }
             catch (Exception ex)
@@ -363,19 +393,18 @@ namespace DMSxMeadow
             }
         }
 
-        private static readonly Dictionary<string, Dictionary<string, byte[]>> IncomingTransfers = new Dictionary<string, Dictionary<string, byte[]>>();
+        private static readonly Dictionary<RequestKey, Dictionary<string, byte[]>> IncomingTransfers = new Dictionary<RequestKey, Dictionary<string, byte[]>>();
 
         public static void ForgetPlayer(OnlinePlayer player)
         {
             if (player == null) return;
             string uid = player.GetUniqueID();
-            string prefix = $"{uid}_";
 
             var incompleteKeys = IncomingTransfers.Keys
-                .Where(k => k.StartsWith(prefix, StringComparison.Ordinal))
+                .Where(k => k.TargetUniqueId == uid)
                 .ToList();
 
-            foreach (string key in incompleteKeys)
+            foreach (var key in incompleteKeys)
             {
                 IncomingTransfers.Remove(key);
             }
@@ -386,13 +415,13 @@ namespace DMSxMeadow
             }
 
             // Limpieza del lado emisor: dejamos de mandarle/reintentarle archivos a quien se fue.
-            var outgoingToDrop = InFlightFiles.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList();
+            var outgoingToDrop = InFlightFiles.Keys.Where(k => k.TargetUniqueId == uid).ToList();
             foreach (var key in outgoingToDrop) InFlightFiles.Remove(key);
 
-            var transfersToDrop = TransfersRemaining.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList();
+            var transfersToDrop = TransfersRemaining.Keys.Where(k => k.TargetUniqueId == uid).ToList();
             foreach (var key in transfersToDrop) TransfersRemaining.Remove(key);
 
-            var requestsToDrop = PendingRequests.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList();
+            var requestsToDrop = PendingRequests.Keys.Where(k => k.TargetUniqueId == uid).ToList();
             foreach (var key in requestsToDrop) PendingRequests.Remove(key);
 
             // La cola de salida es más barata de filtrar reconstruyéndola.
@@ -417,7 +446,7 @@ namespace DMSxMeadow
         {
             MarkRequestSatisfied(sender, skinId);
 
-            string transferKey = $"{sender.GetUniqueID()}_{skinId}";
+            var transferKey = new RequestKey(sender.GetUniqueID(), skinId);
 
             if (!IncomingTransfers.ContainsKey(transferKey))
             {
@@ -432,12 +461,8 @@ namespace DMSxMeadow
                 Plugin.Logger.LogInfo($"[DMSxMeadow] 📦 Skin completa '{skinId}' recibida de {sender.id}. Registrando en caché...");
                 var completeSkinFiles = IncomingTransfers[transferKey];
                 IncomingTransfers.Remove(transferKey);
-                string senderSteamId = DMSNetworkTester.SkinSerializer.GetPlayerSteamId(sender);
+                string senderSteamId = SkinSerializer.GetPlayerSteamId(sender);
                 SkinRegistration.SaveAndRegisterCacheSkin(senderSteamId, skinId, completeSkinFiles);
-
-                // Recrear en caliente el slug remoto: ya tiene todos los archivos y el
-                // atuendo se regenera sin esperar a que cruce una tubería.
-                Plugin.ScheduleRecreateForSteamId(senderSteamId);
             }
         }
     }

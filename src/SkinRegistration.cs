@@ -19,12 +19,6 @@ namespace DMSxMeadow
                 return Path.Combine(modsPath, "dmsxmeadow", "dressmyslugcat");
             }
         }
-        public static readonly HashSet<string> NativeDmsSkins = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "dressmyslugcat.default",
-            "dressmyslugcat.empty"
-            // El resto de skins de DMS ya las añadiré
-        };
 
         /// <summary>
         /// Caché de skins recibidas, agrupada por el SteamID del emisor que las envió.
@@ -193,7 +187,7 @@ namespace DMSxMeadow
 
         private static string FindSkinDirectoryOnDisk(string skinId)
         {
-            if (string.IsNullOrEmpty(skinId) || NativeDmsSkins.Contains(skinId)) return null;
+            if (string.IsNullOrEmpty(skinId)) return null;
 
             List<string> searchRoots = new List<string>();
 
@@ -367,15 +361,32 @@ namespace DMSxMeadow
         public static bool IsSkinAlreadyInstalled(string skinId)
         {
             if (string.IsNullOrEmpty(skinId)) return false;
-            if (NativeDmsSkins.Contains(skinId)) return true;
 
+            // Comprobar en memoria (rápido y sin I/O)
+            if (DressMySlugcat.Plugin.SpriteSheets.Any((SpriteSheet s) => string.Equals(s.ID, skinId, StringComparison.OrdinalIgnoreCase))) return true;
+
+            // Si no está en memoria, verificar si la skin existe en disco DENTRO de un mod activo en Remix
             string installedPath = FindSkinDirectoryOnDisk(skinId);
             if (string.IsNullOrEmpty(installedPath)) return false;
 
+            // Comprobamos si la ruta de la skin pertenece a la caché propia o a un mod activo en ModManager
             string normalizedCachePath = Path.GetFullPath(CacheSkinsPath).TrimEnd('\\', '/');
             string normalizedFoundPath = Path.GetFullPath(installedPath).TrimEnd('\\', '/');
 
-            return !normalizedFoundPath.StartsWith(normalizedCachePath, StringComparison.OrdinalIgnoreCase);
+            if (normalizedFoundPath.StartsWith(normalizedCachePath, StringComparison.OrdinalIgnoreCase))
+            {
+                return true; // Ya está descargada en nuestra caché local
+            }
+
+            // Verificar si está en la lista de mods activados en el menú Remix
+            if (ModManager.ActiveMods.Any(mod => !string.IsNullOrEmpty(mod.path) && normalizedFoundPath.StartsWith(Path.GetFullPath(mod.path), StringComparison.OrdinalIgnoreCase)))
+            {
+                // La skin existe y su mod está activo, pero DMS aún no la cargó en memoria
+                Plugin.Logger.LogInfo($"[DMSxMeadow] Skin '{skinId}' detectada en mod activo pero no cargada en memoria.");
+                return true;
+            }
+
+            return false;
         }
     }
 }
