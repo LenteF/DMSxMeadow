@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
+using System.Text.RegularExpressions;
 using DressMySlugcat;
 using DressMySlugcat.Hooks;
 using UnityEngine;
@@ -19,6 +21,24 @@ namespace DMSxMeadow
                 return Path.Combine(modsPath, "dmsxmeadow", "dressmyslugcat");
             }
         }
+        // Hojas nativas de DMS: se renderizan desde el propio juego, nunca se transfieren
+        // (verificado contra DMS/src/plugin/SpriteSheet.cs: DefaultName="rainworld.default",
+        // EmptyName="dressmyslugcat.empty").
+        public static readonly HashSet<string> NativeDmsSkins = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "rainworld.default",
+            "dressmyslugcat.empty"
+        };
+
+        // H-3: los skinId/fileName llegan de la red y se usan en Path.Combine(CacheSkinsPath, ...)
+        // sin validar (path traversal). Solo se aceptan nombres planos: letras, dígitos, '_', '.', '-'.
+        private static readonly Regex ValidSkinIdentifierRegex =
+            new Regex("^[a-zA-Z0-9_.-]+$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+        public static bool IsValidSkinIdentifier(string value)
+        {
+            return !string.IsNullOrEmpty(value) && ValidSkinIdentifierRegex.IsMatch(value);
+        }
 
         /// <summary>
         /// Caché de skins recibidas, agrupada por el SteamID del emisor que las envió.
@@ -27,13 +47,6 @@ namespace DMSxMeadow
         /// </summary>
         private static readonly Dictionary<string, Dictionary<string, Dictionary<string, byte[]>>> MemorySkinCacheBySender =
             new Dictionary<string, Dictionary<string, Dictionary<string, byte[]>>>(StringComparer.Ordinal);
-
-        public static bool HasCachedSkinFrom(string senderSteamId, string skinId)
-        {
-            return senderSteamId != null
-                && MemorySkinCacheBySender.TryGetValue(senderSteamId, out var skinsBySender)
-                && skinsBySender.ContainsKey(skinId);
-        }
 
         public static void CacheSkinInMemory(string senderSteamId, string skinId, Dictionary<string, byte[]> files)
         {
@@ -48,8 +61,124 @@ namespace DMSxMeadow
             skinsBySender[skinId] = files;
         }
 
+        // ===================================================================
+        // H-5: RENOMBRADO EN DISCO (anti-contaminación del catálogo local)
+        // Cada skin recibida se guarda como "dmsxm_{sufijo_emisor}_{skinId}" y el
+        // metadata.json se reescribe con ese mismo id (verificado: AtlasHooks.cs:95-98
+        // registra el SpriteSheet con el "id" del metadata). Así el id "oficial" del
+        // skin ajeno jamás aparece en el catálogo local (gallery, atlases, autocompletado).
+        // El slug del emisor lo referencia por su id original, que se resuelve al
+        // renombrado en tiempo de consulta (SkinSerializer.ApplyRemapToCustomization).
+        // ===================================================================
+
+        private const string DmsxmSkinPrefix = "dmsxm";
+
+        private static readonly Dictionary<string, Dictionary<string, string>> MemoryRemapBySender =
+            new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal);
+
+        /// <summary>Reduce un SteamID (o id de jugador) a caracteres alfanuméricos planos,
+        /// manteniendo el id COMPLETO, para usarlo como sufijo de carpeta sin violar la
+        /// validación H-3 (^[a-zA-Z0-9_.-]+$). Único límite defensivo: 32 chars, margen de
+        /// sobra para SteamIDs de 17 dígitos que llegan por m_SteamID.ToString().</summary>
+        private static string SanitizeSteamIdForPath(string steamId)
+        {
+            if (string.IsNullOrEmpty(steamId)) return "unknown";
+
+            var chars = new List<char>(steamId.Length);
+            foreach (char c in steamId)
+            {
+                if (char.IsLetterOrDigit(c)) chars.Add(c);
+            }
+
+            if (chars.Count == 0) return "unknown";
+
+            int maxLen = Math.Min(chars.Count, 32);
+            return new string(chars.GetRange(0, maxLen).ToArray());
+        }
+
+        /// <summary>Id renombrado determinista de la skin de un emisor: exclusivo de
+        /// (emisor, skin original) y estable entre sesiones.</summary>
+        public static string ComputeRenamedSkinId(string senderSteamId, string skinId)
+        {
+            return $"{DmsxmSkinPrefix}_{SanitizeSteamIdForPath(senderSteamId)}_{skinId}";
+        }
+
+        /// <summary>Devuelve el id renombrado registrado para (emisor, skin), o null si aún
+        /// no se ha guardado en caché ninguna skin de ese emisor.</summary>
+        public static string GetActiveRemap(string senderSteamId, string skinId)
+        {
+            if (string.IsNullOrEmpty(senderSteamId) || string.IsNullOrEmpty(skinId)) return null;
+
+            if (MemoryRemapBySender.TryGetValue(senderSteamId, out var remaps) &&
+                remaps.TryGetValue(skinId, out string renamedId))
+            {
+                return renamedId;
+            }
+
+            return null;
+        }
+
+        /// <summary>Registra (o devuelve) el id renombrado que se usará en disco para la skin
+        /// de un emisor. Se llama al guardar la skin, nunca antes de que exista en la caché.</summary>
+        public static string GetOrCreateRemap(string senderSteamId, string skinId)
+        {
+            if (string.IsNullOrEmpty(senderSteamId) || string.IsNullOrEmpty(skinId))
+            {
+                return skinId;
+            }
+
+            if (!MemoryRemapBySender.TryGetValue(senderSteamId, out var remaps))
+            {
+                remaps = new Dictionary<string, string>(StringComparer.Ordinal);
+                MemoryRemapBySender[senderSteamId] = remaps;
+            }
+
+            if (remaps.TryGetValue(skinId, out string existing)) return existing;
+
+            string renamedId = ComputeRenamedSkinId(senderSteamId, skinId);
+            remaps[skinId] = renamedId;
+            Plugin.Logger.LogInfo($"[DMSxMeadow] 🔀 Skin '{skinId}' de {senderSteamId} registrada bajo el id renombrado '{renamedId}' (H-5: no contamina el catálogo local).");
+            return renamedId;
+        }
+
+        /// <summary>Ids (renombrados) de las skins guardadas en la caché del mod. Se leen del
+        /// metadata.json de cada subcarpeta para ocultarlas del gallery de DMS (H-5).</summary>
+        public static HashSet<string> GetCachedSheetIds()
+        {
+            var ids = new HashSet<string>(StringComparer.Ordinal);
+            try
+            {
+                if (!Directory.Exists(CacheSkinsPath)) return ids;
+
+                foreach (string dir in Directory.GetDirectories(CacheSkinsPath))
+                {
+                    string jsonPath = Path.Combine(dir, "metadata.json");
+                    if (!File.Exists(jsonPath)) continue;
+
+                    try
+                    {
+                        string jsonText = File.ReadAllText(jsonPath);
+                        Match match = Regex.Match(jsonText, "\"id\"\\s*:\\s*\"([^\"]+)\"");
+                        if (match.Success && !string.IsNullOrEmpty(match.Groups[1].Value))
+                        {
+                            ids.Add(match.Groups[1].Value);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Plugin.Logger.LogWarning($"[DMSxMeadow] No se pudo leer el metadata de la carpeta de caché '{dir}': {ex.Message}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.LogWarning($"[DMSxMeadow] No se pudo listar la caché de skins: {ex.Message}");
+            }
+            return ids;
+        }
+
         /// <summary>Borra de la memoria todo lo aportado por un emisor y su carpeta de caché en
-        /// disco si dejó de estar referenciada por otros jugadores vivos (JcA-float heap).</summary>
+        /// disco (renombrada, exclusiva de (emisor, skin) — ver H-5).</summary>
         public static int ClearCachedSkinsFor(string senderSteamId)
         {
             int cleared = 0;
@@ -62,30 +191,72 @@ namespace DMSxMeadow
 
                 foreach (string skinId in skinsBySender.Keys)
                 {
-                    TryDeleteOrphanedCacheFolder(skinId);
+                    DeleteRenamedCacheFolder(senderSteamId, skinId);
+                }
+            }
+
+            if (MemoryRemapBySender.Remove(senderSteamId))
+            {
+                Plugin.Logger.LogInfo($"[DMSxMeadow] 🧹 Remaps del jugador '{senderSteamId}' purgados (abandonó).");
+            }
+
+            return cleared;
+        }
+
+        /// <summary>Purga total al terminar la sesión (el HOST se fue o se salió del
+        /// lobby): elimina TODAS las skins recibidas en memoria y sus carpetas
+        /// renombradas en disco. Cubre el caso en que los clientes no reciben
+        /// HandleDisconnect del host (lobby destruido — ver Plugin.cs).</summary>
+        public static int ClearAllCachedSkins()
+        {
+            int cleared = 0;
+
+            var senders = new List<string>();
+            foreach (var key in MemorySkinCacheBySender.Keys) senders.Add(key);
+            foreach (var key in MemoryRemapBySender.Keys)
+            {
+                if (!senders.Contains(key)) senders.Add(key);
+            }
+
+            foreach (string senderSteamId in senders)
+            {
+                if (MemorySkinCacheBySender.TryGetValue(senderSteamId, out var skinsBySender))
+                {
+                    cleared += skinsBySender.Count;
+                    MemorySkinCacheBySender.Remove(senderSteamId);
+
+                    foreach (string skinId in skinsBySender.Keys)
+                    {
+                        DeleteRenamedCacheFolder(senderSteamId, skinId);
+                    }
+                }
+
+                if (MemoryRemapBySender.Remove(senderSteamId))
+                {
+                    Plugin.Logger.LogInfo($"[DMSxMeadow] 🧹 Remaps del jugador '{senderSteamId}' purgados (sesión terminada).");
                 }
             }
 
             return cleared;
         }
 
-        private static void TryDeleteOrphanedCacheFolder(string skinId)
+        /// <summary>Borra la carpeta de caché en disco de la skin de un emisor. Gracias al
+        /// renombrado H-5 cada carpeta es exclusiva de (emisor, skin original), así que se
+        /// elimina sin comprobar referencias de otros jugadores.</summary>
+        private static void DeleteRenamedCacheFolder(string senderSteamId, string skinId)
         {
-            bool stillUsedElsewhere = MemorySkinCacheBySender.Values.Any(v => v.ContainsKey(skinId));
-            if (stillUsedElsewhere) return;
-
             try
             {
-                string targetFolder = Path.Combine(CacheSkinsPath, skinId);
+                string targetFolder = Path.Combine(CacheSkinsPath, ComputeRenamedSkinId(senderSteamId, skinId));
                 if (Directory.Exists(targetFolder))
                 {
                     Directory.Delete(targetFolder, true);
-                    Plugin.Logger.LogInfo($"[DMSxMeadow] 🧹 Carpeta de caché de skin '{skinId}' eliminada (emisor salió y nadie más la usa).");
+                    Plugin.Logger.LogInfo($"[DMSxMeadow] 🧹 Carpeta de caché de la skin '{skinId}' (renombrada) eliminada al salir el emisor {senderSteamId}.");
                 }
             }
             catch (Exception ex)
             {
-                Plugin.Logger.LogWarning($"[DMSxMeadow] No se pudo borrar la carpeta de caché de '{skinId}': {ex.Message}");
+                Plugin.Logger.LogWarning($"[DMSxMeadow] No se pudo borrar la carpeta de caché renombrada de '{skinId}' ({senderSteamId}): {ex.Message}");
             }
         }
 
@@ -185,9 +356,27 @@ namespace DMSxMeadow
                 || name.Equals("logo", StringComparison.OrdinalIgnoreCase);
         }
 
+        /// <summary>True si dmsPath es EXACTAMENTE la carpeta de caché del mod
+        /// (mods/dmsxmeadow/dressmyslugcat): las skins cacheadas no deben resolverse como
+        /// skins "instaladas" (H-5).</summary>
+        private static bool IsCachePath(string dmsPath)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(dmsPath) || !Directory.Exists(CacheSkinsPath)) return false;
+                string normalizedCache = Path.GetFullPath(CacheSkinsPath).TrimEnd('\\', '/');
+                string normalizedCandidate = Path.GetFullPath(dmsPath).TrimEnd('\\', '/');
+                return normalizedCandidate.Equals(normalizedCache, StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private static string FindSkinDirectoryOnDisk(string skinId)
         {
-            if (string.IsNullOrEmpty(skinId)) return null;
+            if (string.IsNullOrEmpty(skinId) || NativeDmsSkins.Contains(skinId)) return null;
 
             List<string> searchRoots = new List<string>();
 
@@ -235,7 +424,7 @@ namespace DMSxMeadow
             {
                 // Caso A: La ruta del mod tiene carpeta dressmyslugcat directa (improbable)
                 string directDmsPath = Path.Combine(rootFolder, "dressmyslugcat");
-                if (Directory.Exists(directDmsPath))
+                if (Directory.Exists(directDmsPath) && !IsCachePath(directDmsPath))
                 {
                     string match = CheckDmsDirectoryForSkin(directDmsPath, skinId);
                     if (match != null) return match;
@@ -247,7 +436,7 @@ namespace DMSxMeadow
                     foreach (string subDir in Directory.GetDirectories(rootFolder))
                     {
                         string dmsPath = Path.Combine(subDir, "dressmyslugcat");
-                        if (Directory.Exists(dmsPath))
+                        if (Directory.Exists(dmsPath) && !IsCachePath(dmsPath))
                         {
                             string match = CheckDmsDirectoryForSkin(dmsPath, skinId);
                             if (match != null) return match;
@@ -262,7 +451,10 @@ namespace DMSxMeadow
 
         private static string CheckDmsDirectoryForSkin(string dmsPath, string skinId)
         {
-            foreach (string skinDir in Directory.GetDirectories(dmsPath))
+            // Los packs reales agrupan las skins en categorías (p.ej. "Vanilla Scugs\standard",
+            // "Misc Cosmetics\face variants\Thin Alt\alt angry eyes"), así que la carpeta de
+            // skin con metadata.json puede estar a cualquier profundidad: se recorre recursivo.
+            foreach (string skinDir in Directory.GetDirectories(dmsPath, "*", SearchOption.AllDirectories))
             {
                 string jsonPath = Path.Combine(skinDir, "metadata.json");
                 if (File.Exists(jsonPath))
@@ -308,21 +500,20 @@ namespace DMSxMeadow
                 CacheSkinInMemory(senderSteamId, skinId, files);
                 Plugin.Logger.LogInfo($"[DMSxMeadow] 🧠 Skin '{skinId}' registrada en memoria (emisor {senderSteamId}).");
 
-                if (IsSkinAlreadyInstalled(skinId))
-                {
-                    Plugin.Logger.LogWarning($"[DMSxMeadow] ⚡ La skin '{skinId}' ya existe instalada localmente o en la Workshop. No se crea copia en caché.");
-                    return true;
-                }
+                // Plan aprobado 3.4.1: SIN cortocircuito por el pack instalado localmente/Workshop
+                // (IsSkinAlreadyInstalled). El único dedupe válido es la carpeta renombrada
+                // de ESTE emisor (abajo): la variante ajena nunca colisiona con ningún
+                // pack local, el id renombrado nace exclusivo.
 
-                string targetFolder = Path.Combine(CacheSkinsPath, skinId);
-                string targetMetadata = Path.Combine(targetFolder, "metadata.json");
+                // H-5: la skin aterriza en disco con id renombrado (dmsxm_{emisor}_{skinId})
+                // y su metadata.json se reescribe con ese id: el catálogo local de DMS no se
+                // contamina con ids de skins ajenas descargadas.
+                string renamedId = GetOrCreateRemap(senderSteamId, skinId);
+                string targetFolder = Path.Combine(CacheSkinsPath, renamedId);
 
-                if (Directory.Exists(targetFolder) && File.Exists(targetMetadata))
-                {
-                    Plugin.Logger.LogWarning($"[DMSxMeadow] ⚡ La skin '{skinId}' ya existe en la caché local. Se omite la copia en disco.");
-                    return true;
-                }
-
+                // Requisito 11/08/2026 (aislamiento absoluto): la caché se regenera SIEMPRE
+                // desde la máquina origen. Una carpeta renombrada de una sesión anterior
+                // (mismo emisor, mismo id) no se recicla: se sobrescribe por completo.
                 if (Directory.Exists(targetFolder))
                 {
                     Directory.Delete(targetFolder, true);
@@ -339,10 +530,17 @@ namespace DMSxMeadow
                         Directory.CreateDirectory(fileDir);
                     }
 
-                    File.WriteAllBytes(filePath, kvp.Value);
+                    if (kvp.Key.Equals("metadata.json", StringComparison.OrdinalIgnoreCase))
+                    {
+                        File.WriteAllBytes(filePath, RewriteMetadataId(kvp.Value, renamedId));
+                    }
+                    else
+                    {
+                        File.WriteAllBytes(filePath, kvp.Value);
+                    }
                 }
 
-                Plugin.Logger.LogInfo($"[DMSxMeadow] 💾 Skin '{skinId}' guardada por primera vez en caché: {targetFolder}");
+                Plugin.Logger.LogInfo($"[DMSxMeadow] 💾 Skin '{skinId}' guardada por primera vez en caché (renombrada '{renamedId}'): {targetFolder}");
                 AtlasHooks.ReloadAtlases();
                 Plugin.Logger.LogInfo($"[DMSxMeadow] ✅ AtlasHooks.ReloadAtlases() ejecutado.");
 
@@ -358,35 +556,30 @@ namespace DMSxMeadow
             }
         }
 
-        public static bool IsSkinAlreadyInstalled(string skinId)
+        /// <summary>Reescribe el campo "id" del metadata.json con el id renombrado (H-5)
+        /// — AtlasHooks.cs:95-98 registra el SpriteSheet a partir de esa clave, así el id
+        /// oficial del skin ajeno nunca entra al registro de DMS. El resto del JSON queda
+        /// intacto (solo se sustituye la primera aparición de la clave "id").</summary>
+        private static byte[] RewriteMetadataId(byte[] originalMetadata, string renamedId)
         {
-            if (string.IsNullOrEmpty(skinId)) return false;
-
-            // Comprobar en memoria (rápido y sin I/O)
-            if (DressMySlugcat.Plugin.SpriteSheets.Any((SpriteSheet s) => string.Equals(s.ID, skinId, StringComparison.OrdinalIgnoreCase))) return true;
-
-            // Si no está en memoria, verificar si la skin existe en disco DENTRO de un mod activo en Remix
-            string installedPath = FindSkinDirectoryOnDisk(skinId);
-            if (string.IsNullOrEmpty(installedPath)) return false;
-
-            // Comprobamos si la ruta de la skin pertenece a la caché propia o a un mod activo en ModManager
-            string normalizedCachePath = Path.GetFullPath(CacheSkinsPath).TrimEnd('\\', '/');
-            string normalizedFoundPath = Path.GetFullPath(installedPath).TrimEnd('\\', '/');
-
-            if (normalizedFoundPath.StartsWith(normalizedCachePath, StringComparison.OrdinalIgnoreCase))
+            try
             {
-                return true; // Ya está descargada en nuestra caché local
-            }
+                string jsonText = Encoding.UTF8.GetString(originalMetadata);
+                Match match = Regex.Match(jsonText, "\"id\"\\s*:\\s*\"([^\"]*)\"");
+                if (!match.Success) return originalMetadata;
 
-            // Verificar si está en la lista de mods activados en el menú Remix
-            if (ModManager.ActiveMods.Any(mod => !string.IsNullOrEmpty(mod.path) && normalizedFoundPath.StartsWith(Path.GetFullPath(mod.path), StringComparison.OrdinalIgnoreCase)))
+                string newJsonText = jsonText.Substring(0, match.Index)
+                    + "\"id\": \"" + renamedId + "\""
+                    + jsonText.Substring(match.Index + match.Length);
+
+                return Encoding.UTF8.GetBytes(newJsonText);
+            }
+            catch (Exception ex)
             {
-                // La skin existe y su mod está activo, pero DMS aún no la cargó en memoria
-                Plugin.Logger.LogInfo($"[DMSxMeadow] Skin '{skinId}' detectada en mod activo pero no cargada en memoria.");
-                return true;
+                Plugin.Logger.LogWarning($"[DMSxMeadow] No se pudo reescribir el id del metadata.json a '{renamedId}': {ex.Message}");
+                return originalMetadata;
             }
-
-            return false;
         }
-    }
+
+        }
 }

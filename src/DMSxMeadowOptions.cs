@@ -31,16 +31,25 @@ namespace DMSxMeadow
         // FLAG DE CONSENTIMIENTO (RF-7 / Capa 0) — default OFF
         // ============================================================
         private static Configurable<bool> _shareSkinConfig;
+
+        /// <summary>Estado global en memoria del flag de compartir. Se carga UNA vez al
+        /// arranque desde el archivo ModConfigs/dmsxmeadow.txt y se actualiza en vivo cuando
+        /// el usuario togglea el checkbox del OI (cuyo valor es el que Remix persistirá al
+        /// cerrar el menú). Así no hay I/O de disco por petición y no existe la ventana de
+        /// arranque donde el bind de Remix devolvía el default.</summary>
+        private static bool _shareSkinMemory;
+        private static bool _shareSkinMemoryInitialized;
+
         public static bool ShareSkinEnabled
         {
             get
             {
-                // El bind de Remix solo existe si el usuario abrió la config del mod
-                // (Initialize() del OI). Si no, leemos el archivo de config directamente
-                // (ModConfigs/dmsxmeadow.txt) — misma fuente que Remix — para que el
-                // bit del handshake siempre refleje el valor real en disco.
-                if (_shareSkinConfig != null) return _shareSkinConfig.Value;
-                return ReadShareSkinFromFile();
+                if (!_shareSkinMemoryInitialized)
+                {
+                    _shareSkinMemory = ReadShareSkinFromFile();
+                    _shareSkinMemoryInitialized = true;
+                }
+                return _shareSkinMemory;
             }
         }
 
@@ -72,8 +81,10 @@ namespace DMSxMeadow
         }
 
         /// <summary>
-        /// Bindeo temprano del flag (defensa en profundidad): si el config de Remix ya
-        /// está disponible, lo usa en vez de leer el archivo. Se llama desde OnModsInit.
+        /// Bindeo temprano del flag para el checkbox del OI (defensa en profundidad). El
+        /// valor QUE MANDÁ en el comportamiento es siempre el del archivo en disco
+        /// (ShareSkinEnabled); el bind solo informa al checkbox, que Remix persiste al
+        /// cerrar el menú. Se llama desde OnModsInit.
         /// </summary>
         public void EnsureConfigBound()
         {
@@ -83,8 +94,16 @@ namespace DMSxMeadow
                 {
                     _shareSkinConfig = this.config.Bind<bool>("shareSkin", false, new ConfigurableInfo(
                         "Allow other players to request the skins you have equipped. OFF by default: your skins never leave your machine."));
-                    Plugin.Logger.LogInfo($"[DMSxMeadow] Flag de compartir skin cargado temprano (Remix bind): {_shareSkinConfig.Value}");
                 }
+
+                // Carga inicial del estado en memoria desde el archivo (una sola vez).
+                if (!_shareSkinMemoryInitialized)
+                {
+                    _shareSkinMemory = ReadShareSkinFromFile();
+                    _shareSkinMemoryInitialized = true;
+                }
+
+                Plugin.Logger.LogInfo($"[DMSxMeadow] Flag de compartir skin (fuente: ModConfigs/dmsxmeadow.txt): {_shareSkinMemory}");
             }
             catch (Exception ex)
             {
@@ -136,6 +155,16 @@ namespace DMSxMeadow
             _onlineTab.AddItems(onlineTitle);
 
             var shareCheckbox = new OpCheckBox(_shareSkinConfig, new Vector2(20f, 440f));
+            // El checkbox togglea en vivo el estado en memoria: ese valor es exactamente el
+            // que Remix persistirá al archivo al cerrar el menú, así que no hace falta
+            // releer el disco (que aún tendría el valor viejo hasta el guardado).
+            shareCheckbox.OnValueChanged += (_, _, newValue) =>
+            {
+                if (bool.TryParse(newValue, out bool parsed))
+                {
+                    _shareSkinMemory = parsed;
+                }
+            };
             _onlineTab.AddItems(shareCheckbox);
 
             var shareDescription = new OpLabel(
