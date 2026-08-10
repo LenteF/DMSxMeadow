@@ -1,59 +1,52 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net48</TargetFramework>
-    <LangVersion>13</LangVersion>
     <AssemblyName>dmsxmeadow</AssemblyName>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-    <OutputPath>D:\programas\Steam\steamapps\common\Rain World\RainWorld_Data\StreamingAssets\mods\dmsxmeadow\plugins\</OutputPath>
+    <OutputPath>$(MSBuildProjectDirectory)\..\dmsxmeadow\plugins\</OutputPath>
     <PathMap>$(MSBuildProjectDirectory)=/$(SolutionName)</PathMap>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>13</LangVersion>
     <DebugType>portable</DebugType>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>13</LangVersion>
     <DebugType>none</DebugType>
   </PropertyGroup>
 
+<ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" ExcludeAssets="runtime" />
+  </ItemGroup>
+
   <ItemGroup>
-    <Reference Include="UnityEngine">
-      <HintPath>..\lib\UnityEngine.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="UnityEngine.CoreModule">
-      <HintPath>..\lib\UnityEngine.CoreModule.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    
-    <!-- ============================================================ -->
-    <!-- INPUT Y GUIUTILITY (necesarios para Ctrl+V)                  -->
-    <!-- ============================================================ -->
-    <Reference Include="UnityEngine.InputLegacyModule">
-      <HintPath>..\lib\UnityEngine.InputLegacyModule.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="UnityEngine.IMGUIModule">
-      <HintPath>..\lib\UnityEngine.IMGUIModule.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    
-    <Reference Include="Assembly-CSharp">
-      <HintPath>..\lib\PUBLIC-Assembly-CSharp.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="HOOKS-Assembly-CSharp">
-      <HintPath>..\lib\HOOKS-Assembly-CSharp.dll</HintPath>
+    <Reference Include="0Harmony">
+      <HintPath>..\lib\0Harmony.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="BepInEx">
       <HintPath>..\lib\BepInEx.dll</HintPath>
       <Private>false</Private>
     </Reference>
-    <Reference Include="0Harmony">
-      <HintPath>..\lib\0Harmony.dll</HintPath>
+    <Reference Include="com.rlabrecque.steamworks.net">
+      <HintPath>..\lib\com.rlabrecque.steamworks.net.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="DressMySlugcat">
+      <HintPath>..\lib\DressMySlugcat.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="HOOKS-Assembly-CSharp">
+      <HintPath>..\lib\HOOKS-Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Mono.Cecil">
+      <HintPath>..\lib\Mono.Cecil.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="MonoMod.RuntimeDetour">
@@ -64,33 +57,40 @@
       <HintPath>..\lib\MonoMod.Utils.dll</HintPath>
       <Private>false</Private>
     </Reference>
-    <Reference Include="Mono.Cecil">
-      <HintPath>..\lib\Mono.Cecil.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    
-    <!-- Dependencias de mods -->
-    <Reference Include="DressMySlugcat">
-      <HintPath>..\lib\DressMySlugcat.dll</HintPath>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>..\lib\PUBLIC-Assembly-CSharp.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="Rain Meadow">
       <HintPath>..\lib\Rain Meadow.dll</HintPath>
       <Private>false</Private>
     </Reference>
-    
-    <!-- ============================================================ -->
-    <!-- Steamworks.NET - necesaria para CSteamID                      -->
-    <!-- ============================================================ -->
-    <Reference Include="com.rlabrecque.steamworks.net">
-      <HintPath>..\lib\com.rlabrecque.steamworks.net.dll</HintPath>
+    <Reference Include="UnityEngine">
+      <HintPath>..\lib\UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>..\lib\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.ImageConversionModule">
+      <HintPath>D:\programas\Steam\steamapps\common\Rain World\RainWorld_Data\Managed\UnityEngine.ImageConversionModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>..\lib\UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule">
+      <HintPath>..\lib\UnityEngine.InputLegacyModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>
 
-  <Target Name="GenerateMod" AfterTargets="PostBuildEvent" Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+  <Target Name="GenerateMod" AfterTargets="Build">
     <ItemGroup>
-      <RemovePlugins Include="D:\programas\Steam\steamapps\common\Rain World\RainWorld_Data\StreamingAssets\mods\dmsxmeadow\plugins\*.pdb" />
+      <RemovePlugins Include="$(OutputPath)*.dll" Exclude="$(OutputPath)dmsxmeadow.dll" />
+      <RemovePlugins Include="$(OutputPath)*.pdb" />
     </ItemGroup>
     <Delete Files="@(RemovePlugins)" />
   </Target>

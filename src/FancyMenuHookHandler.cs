@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using Menu;
 using MonoMod.RuntimeDetour;
@@ -15,6 +16,7 @@ namespace DMSxMeadow
         private static Hook setSelectedHook;
         private static Hook shutdownHook;
         private static Hook customizationFor3ArgHook;
+        private static Hook galleryDialogCtorHook;
         private static Dictionary<DressMySlugcat.FancyMenu, MeadowProfileUI> _uiInstances = new Dictionary<DressMySlugcat.FancyMenu, MeadowProfileUI>();
 
         private static DressMySlugcat.FancyMenu _currentFancyMenu;
@@ -105,6 +107,21 @@ namespace DMSxMeadow
                     if (hookFor3Arg != null)
                     {
                         customizationFor3ArgHook = new Hook(for3Arg, hookFor3Arg);
+                    }
+                }
+
+                MethodBase galleryCtor = typeof(DressMySlugcat.GalleryDialog)
+                    .GetConstructor(new[] { typeof(string), typeof(DressMySlugcat.FancyMenu) });
+
+                if (galleryCtor != null)
+                {
+                    MethodInfo hookGalleryCtor = typeof(FancyMenuHookHandler)
+                        .GetMethod("GalleryDialog_Ctor_Hook",
+                            BindingFlags.NonPublic | BindingFlags.Static);
+
+                    if (hookGalleryCtor != null)
+                    {
+                        galleryDialogCtorHook = new Hook(galleryCtor, hookGalleryCtor);
                     }
                 }
             }
@@ -371,6 +388,84 @@ namespace DMSxMeadow
             orig(fancyMenu, sender, message);
         }
 
+        /// <summary>
+        /// H-5: el gallery de DMS (GalleryDialog.cs:59) lista TODAS las SpriteSheets
+        /// registradas, incluidas las skins que otros jugadores nos enviaron (guardadas en
+        /// caché con id renombrado). Se ocultan de la lista global durante el constructor
+        /// (cuando el dialogo copia las hojas a su propia lista) y se reincorporan después.
+        /// </summary>
+        private static void GalleryDialog_Ctor_Hook(
+            Action<DressMySlugcat.GalleryDialog, string, DressMySlugcat.FancyMenu> orig,
+            DressMySlugcat.GalleryDialog self,
+            string spriteName,
+            DressMySlugcat.FancyMenu owner)
+        {
+            List<DressMySlugcat.SpriteSheet> hiddenSheets = HideCachedSheetsFromGallery();
+            try
+            {
+                orig(self, spriteName, owner);
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.LogError($"Error en GalleryDialog ctor hook: {ex.Message}");
+            }
+            finally
+            {
+                RestoreHiddenSheets(hiddenSheets);
+            }
+        }
+
+        /// <summary>Retira de DressMySlugcat.Plugin.SpriteSheets las hojas que viven en la caché
+        /// del mod (dmsxmeadow/dressmyslugcat) y devuelve la lista de lo ocultado para poder
+        /// restaurarlo.</summary>
+        private static List<DressMySlugcat.SpriteSheet> HideCachedSheetsFromGallery()
+        {
+            var hiddenSheets = new List<DressMySlugcat.SpriteSheet>();
+            try
+            {
+                HashSet<string> cachedIds = SkinRegistration.GetCachedSheetIds();
+                if (cachedIds.Count == 0) return hiddenSheets;
+
+                for (int i = DressMySlugcat.Plugin.SpriteSheets.Count - 1; i >= 0; i--)
+                {
+                    var sheet = DressMySlugcat.Plugin.SpriteSheets[i];
+                    if (sheet != null && cachedIds.Contains(sheet.ID))
+                    {
+                        hiddenSheets.Add(sheet);
+                        DressMySlugcat.Plugin.SpriteSheets.RemoveAt(i);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.LogError($"Error ocultando hojas de caché del gallery: {ex.Message}");
+            }
+            return hiddenSheets;
+        }
+
+        /// <summary>Reincorpora a la lista global las hojas ocultadas, evitando duplicados si
+        /// durante el dialogo se relanzó el registro de atlas (ReloadAtlases re-escanea el
+        /// disco y recrea las hojas de caché con los mismos ids).</summary>
+        private static void RestoreHiddenSheets(List<DressMySlugcat.SpriteSheet> hiddenSheets)
+        {
+            try
+            {
+                foreach (var sheet in hiddenSheets)
+                {
+                    if (sheet == null) continue;
+                    bool alreadyPresent = DressMySlugcat.Plugin.SpriteSheets.Any(s => s != null && s.ID.Equals(sheet.ID, StringComparison.Ordinal));
+                    if (!alreadyPresent)
+                    {
+                        DressMySlugcat.Plugin.SpriteSheets.Add(sheet);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.LogError($"Error restaurando hojas de caché tras el gallery: {ex.Message}");
+            }
+        }
+
         private static void HandleMeadowCopyPasteDefaults(DressMySlugcat.FancyMenu fancyMenu, string message)
         {
             string slugcat = fancyMenu.selectedSlugcat;
@@ -527,6 +622,7 @@ namespace DMSxMeadow
             setSelectedHook?.Dispose();
             shutdownHook?.Dispose();
             customizationFor3ArgHook?.Dispose();
+            galleryDialogCtorHook?.Dispose();
             _uiInstances.Clear();
             _currentFancyMenu = null;
             _liveMeadowCustomizations.Clear();
