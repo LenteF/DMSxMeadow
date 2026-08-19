@@ -16,7 +16,10 @@ namespace DMSxMeadow
         public static readonly HashSet<string> NativeDmsSkins = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "rainworld.default",
-            "dressmyslugcat.empty"
+            "dressmyslugcat.empty",
+            "dressmyslugcat.asymmetrytemplate",
+            "dressmyslugcat.template",
+            "dressmyslugcat.saintshirt"
         };
 
         private static readonly Regex ValidSkinIdentifierRegex =
@@ -114,7 +117,7 @@ namespace DMSxMeadow
 
             string renamedId = ComputeRenamedSkinId(senderSteamId, skinId);
             remaps[skinId] = renamedId;
-            Plugin.Logger.LogDebug($"[DMSxMeadow] 🔀 Skin '{skinId}' de {senderSteamId} registrada bajo el id renombrado '{renamedId}' (H-5: no contamina el catálogo local).");
+            Plugin.Logger.LogDebug($"🔀 Skin '{skinId}' de {senderSteamId} registrada bajo el id renombrado '{renamedId}' (H-5: no contamina el catálogo local).");
             return renamedId;
         }
 
@@ -139,14 +142,14 @@ namespace DMSxMeadow
 
                 if (RegisteredMemorySheets.Contains(renamedId))
                 {
-                    Plugin.Logger.LogDebug($"[DMSxMeadow] ♻️ Skin '{skinId}' ya registrada en memoria (id '{renamedId}'). Sin re-registro.");
+                    Plugin.Logger.LogDebug($"♻️ Skin '{skinId}' ya registrada en memoria (id '{renamedId}'). Sin re-registro.");
                     return true;
                 }
 
                 var sheet = BuildSpriteSheet(renamedId, files);
                 if (sheet == null)
                 {
-                    Plugin.Logger.LogWarning($"[DMSxMeadow] ⚠️ Skin '{skinId}' de {senderSteamId}: no se pudo construir el SpriteSheet en memoria (archivos incompletos). Skin por defecto (RNF-3).");
+                    Plugin.Logger.LogWarning($"⚠️ Skin '{skinId}' de {senderSteamId}: no se pudo construir el SpriteSheet en memoria (archivos incompletos). Skin por defecto (RNF-3).");
                     return false;
                 }
 
@@ -155,14 +158,14 @@ namespace DMSxMeadow
                 DressMySlugcat.Plugin.SpriteSheets.Add(sheet);
                 RegisteredMemorySheets.Add(renamedId);
 
-                Plugin.Logger.LogDebug($"[DMSxMeadow] 🧠 Skin '{skinId}' de {senderSteamId} registrada EN MEMORIA como '{renamedId}' ({sheet.Atlases.Count} atlas, {sheet.Elements.Count + sheet.LeftElements.Count + sheet.RightElements.Count} elementos).");
+                Plugin.Logger.LogDebug($"🧠 Skin '{skinId}' de {senderSteamId} registrada EN MEMORIA como '{renamedId}' ({sheet.Atlases.Count} atlas, {sheet.Elements.Count + sheet.LeftElements.Count + sheet.RightElements.Count} elementos).");
 
                 Plugin.ScheduleRecreateForSteamId(senderSteamId);
                 return true;
             }
             catch (Exception ex)
             {
-                Plugin.Logger.LogError($"[DMSxMeadow] Error al registrar la skin '{skinId}' en memoria: {ex}");
+                Plugin.Logger.LogError($"Error al registrar la skin '{skinId}' en memoria: {ex}");
                 return false;
             }
         }
@@ -183,7 +186,7 @@ namespace DMSxMeadow
                 }
                 catch (Exception ex)
                 {
-                    Plugin.Logger.LogWarning($"[DMSxMeadow] No se pudo parsear el metadata.json de '{renamedId}' ({ex.Message}). Se usa nombre/autor por defecto.");
+                    Plugin.Logger.LogWarning($"No se pudo parsear el metadata.json de '{renamedId}' ({ex.Message}). Se usa nombre/autor por defecto.");
                 }
             }
 
@@ -205,7 +208,7 @@ namespace DMSxMeadow
                 string txtName = Path.ChangeExtension(kvp.Key, ".txt");
                 if (!files.TryGetValue(txtName, out byte[] txtBytes))
                 {
-                    Plugin.Logger.LogWarning($"[DMSxMeadow] Skin '{renamedId}': '{kvp.Key}' no tiene su .txt compañero. Se omite esa parte y se construye el resto (mirror AtlasHooks.cs:185-189).");
+                    Plugin.Logger.LogWarning($"Skin '{renamedId}': '{kvp.Key}' no tiene su .txt compañero. Se omite esa parte y se construye el resto (mirror AtlasHooks.cs:185-189).");
                     continue;
                 }
 
@@ -217,7 +220,7 @@ namespace DMSxMeadow
 
             if (sheet.Atlases.Count == 0)
             {
-                Plugin.Logger.LogWarning($"[DMSxMeadow] Skin '{renamedId}': sin partes registrables (ningún png válido con su .txt). Rechazada.");
+                Plugin.Logger.LogWarning($"Skin '{renamedId}': sin partes registrables (ningún png válido con su .txt). Rechazada.");
                 return null;
             }
 
@@ -227,7 +230,7 @@ namespace DMSxMeadow
             }
             catch (Exception ex)
             {
-                Plugin.Logger.LogWarning($"[DMSxMeadow] Error al parsear los atlas de '{renamedId}': {ex.Message}. Rechazada (RNF-3).");
+                Plugin.Logger.LogWarning($"Error al parsear los atlas de '{renamedId}': {ex.Message}. Rechazada (RNF-3).");
                 UnloadAtlases(sheet.Atlases);
                 return null;
             }
@@ -290,10 +293,10 @@ namespace DMSxMeadow
                 {
                     throw new Exception($"No se pudo decodificar el PNG '{pngName}'.");
                 }
-                Plugin.Logger.LogDebug($"[DMSxMeadow] 📥 Parte '{pngName}' ({pngBytes.Length} B): textura {texture.width}x{texture.height} {texture.format}, filtro={texture.filterMode}, wrap={texture.wrapMode}, aniso={texture.anisoLevel}.");
+                Plugin.Logger.LogDebug($"📥 Parte '{pngName}' ({pngBytes.Length} B): textura {texture.width}x{texture.height} {texture.format}, filtro={texture.filterMode}, wrap={texture.wrapMode}, aniso={texture.anisoLevel}.");
 
                 atlas = new FAtlas(atlasName, texture, NextMemoryAtlasIndex(), false);
-                Plugin.Logger.LogDebug($"[DMSxMeadow]   FAtlas '{atlasName}' creado (index {atlas.index}, textura {texture.width}x{texture.height}).");
+                Plugin.Logger.LogDebug($"  FAtlas '{atlasName}' creado (index {atlas.index}, textura {texture.width}x{texture.height}).");
 
                 atlas.elements.RemoveAt(0);
 
@@ -309,7 +312,7 @@ namespace DMSxMeadow
                 float texHeight = texture.height;
                 int indexInAtlas = 0;
                 bool firstFrameLogged = false;
-                Plugin.Logger.LogDebug($"[DMSxMeadow]   JSON OK: {framesObj.Count} frame(s) definidos en el .txt de '{pngName}'.");
+                Plugin.Logger.LogDebug($"  JSON OK: {framesObj.Count} frame(s) definidos en el .txt de '{pngName}'.");
 
                 foreach (JProperty frameProp in framesObj.Properties())
                 {
@@ -369,7 +372,7 @@ namespace DMSxMeadow
                     if (!firstFrameLogged)
                     {
                         firstFrameLogged = true;
-                        Plugin.Logger.LogDebug($"[DMSxMeadow]   Primer frame '{elementName}': txt=({x},{y},{w},{h}) en textura {texWidth}x{texHeight} -> uv={uvRect} (origen TL {element.uvTopLeft}), trimmed={trimmed}, sourceSize={element.sourceSize}");
+                        Plugin.Logger.LogDebug($"  Primer frame '{elementName}': txt=({x},{y},{w},{h}) en textura {texWidth}x{texHeight} -> uv={uvRect} (origen TL {element.uvTopLeft}), trimmed={trimmed}, sourceSize={element.sourceSize}");
                     }
 
                     atlas.elements.Add(element);
@@ -381,14 +384,14 @@ namespace DMSxMeadow
                 }
 
                 AddAtlasToManager(atlas);
-                Plugin.Logger.LogDebug($"[DMSxMeadow]   Atlas '{atlasName}' registrado en el manager con {indexInAtlas} frame(s).");
+                Plugin.Logger.LogDebug($"  Atlas '{atlasName}' registrado en el manager con {indexInAtlas} frame(s).");
 
                 return atlas;
             }
             catch (Exception ex)
             {
                 string inner = ex.InnerException != null ? $" => {ex.InnerException.Message}" : "";
-                Plugin.Logger.LogWarning($"[DMSxMeadow] ⛔ Parte '{pngName}' rechazada: {ex.Message}{inner}");
+                Plugin.Logger.LogWarning($"⛔ Parte '{pngName}' rechazada: {ex.Message}{inner}");
                 if (atlas != null)
                 {
                     if (Futile.atlasManager.DoesContainAtlas(atlasName))
@@ -498,7 +501,7 @@ namespace DMSxMeadow
 
             if (released > 0 || cachedEntries > 0)
             {
-                Plugin.Logger.LogDebug($"[DMSxMeadow] 🧹 Wipe total (MainMenu): {released} hoja(s) de memoria descargadas y {cachedEntries} entrada(s) de caché purgadas.");
+                Plugin.Logger.LogDebug($"🧹 Wipe total (MainMenu): {released} hoja(s) de memoria descargadas y {cachedEntries} entrada(s) de caché purgadas.");
             }
             return released + cachedEntries;
         }
@@ -535,7 +538,7 @@ namespace DMSxMeadow
 
             if (released > 0 || cached > 0 || remapRemoved)
             {
-                Plugin.Logger.LogDebug($"[DMSxMeadow] 🧹 Estado en memoria de {senderSteamId} purgado (ban de skins): {released} hoja(s) descargada(s), {cached} entrada(s) de caché, remaps {(remapRemoved ? "eliminados" : "sin tocar")}.");
+                Plugin.Logger.LogDebug($"🧹 Estado en memoria de {senderSteamId} purgado (ban de skins): {released} hoja(s) descargada(s), {cached} entrada(s) de caché, remaps {(remapRemoved ? "eliminados" : "sin tocar")}.");
             }
 
             return released + cached;
@@ -559,7 +562,7 @@ namespace DMSxMeadow
                 }
                 catch (Exception ex)
                 {
-                    Plugin.Logger.LogWarning($"[DMSxMeadow] No se pudo descargar el atlas '{atlas.name}': {ex.Message}");
+                    Plugin.Logger.LogWarning($"No se pudo descargar el atlas '{atlas.name}': {ex.Message}");
                 }
             }
         }
@@ -575,7 +578,7 @@ namespace DMSxMeadow
             string skinFolder = FindSkinDirectoryOnDisk(skinId);
             if (string.IsNullOrEmpty(skinFolder) || !Directory.Exists(skinFolder))
             {
-                Plugin.Logger.LogError($"[DMSxMeadow] ❌ No se encontró la carpeta física de la skin '{skinId}' en los mods.");
+                Plugin.Logger.LogError($"❌ No se encontró la carpeta física de la skin '{skinId}' en los mods.");
                 return files;
             }
 
@@ -606,7 +609,7 @@ namespace DMSxMeadow
                 }
                 else
                 {
-                    Plugin.Logger.LogWarning($"[DMSxMeadow] Skin '{skinId}': '{pngRelative}' no tiene su .txt compañero. Se transfiere igual (el receptor omitirá esa parte, mirror AtlasHooks.cs:185-189).");
+                    Plugin.Logger.LogWarning($"Skin '{skinId}': '{pngRelative}' no tiene su .txt compañero. Se transfiere igual (el receptor omitirá esa parte, mirror AtlasHooks.cs:185-189).");
                 }
             }
 
@@ -617,7 +620,7 @@ namespace DMSxMeadow
                 files[metadataRelative] = File.ReadAllBytes(metadataFull);
             }
 
-            Plugin.Logger.LogDebug($"[DMSxMeadow] 📦 Skin '{skinId}' empaquetada con éxito desde disco ({files.Count} archivos: {pngPaths.Count} partes + txts + metadata).");
+            Plugin.Logger.LogDebug($"📦 Skin '{skinId}' empaquetada con éxito desde disco ({files.Count} archivos: {pngPaths.Count} partes + txts + metadata).");
             return files;
         }
 
@@ -657,7 +660,7 @@ namespace DMSxMeadow
             }
             catch (Exception ex)
             {
-                Plugin.Logger.LogWarning($"[DMSxMeadow] No se pudo leer ModManager.InstalledMods: {ex.Message}");
+                Plugin.Logger.LogWarning($"No se pudo leer ModManager.InstalledMods: {ex.Message}");
             }
 
             try
@@ -676,7 +679,7 @@ namespace DMSxMeadow
             }
             catch (Exception ex)
             {
-                Plugin.Logger.LogWarning($"[DMSxMeadow] No se pudo resolver la ruta directa de Workshop: {ex.Message}");
+                Plugin.Logger.LogWarning($"No se pudo resolver la ruta directa de Workshop: {ex.Message}");
             }
 
             foreach (string rootFolder in searchRoots)
@@ -702,7 +705,7 @@ namespace DMSxMeadow
                 }
             }
 
-            Plugin.Logger.LogError($"[DMSxMeadow] ❌ No se encontró la carpeta física para la skin '{skinId}' ni en local ni en Workshop.");
+            Plugin.Logger.LogError($"❌ No se encontró la carpeta física para la skin '{skinId}' ni en local ni en Workshop.");
             return null;
         }
 
@@ -718,7 +721,7 @@ namespace DMSxMeadow
                         string jsonText = File.ReadAllText(jsonPath);
                         if (jsonText.Contains($"\"id\": \"{skinId}\"") || jsonText.Contains($"\"id\":\"{skinId}\""))
                         {
-                            Plugin.Logger.LogDebug($"[DMSxMeadow] 🎯 Skin '{skinId}' encontrada con éxito en: {skinDir}");
+                            Plugin.Logger.LogDebug($"🎯 Skin '{skinId}' encontrada con éxito en: {skinDir}");
                             return skinDir;
                         }
 
@@ -731,7 +734,7 @@ namespace DMSxMeadow
                             {
                                 if (part.Length > 2 && jsonText.Contains($"\"{part}\""))
                                 {
-                                    Plugin.Logger.LogDebug($"[DMSxMeadow] 🎯 Skin '{skinId}' encontrada (Coincidencia Parcial: '{part}') en: {skinDir}");
+                                    Plugin.Logger.LogDebug($"🎯 Skin '{skinId}' encontrada (Coincidencia Parcial: '{part}') en: {skinDir}");
                                     return skinDir;
                                 }
                             }

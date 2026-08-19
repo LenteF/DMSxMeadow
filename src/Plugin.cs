@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace DMSxMeadow
 {
-    [BepInPlugin("dmsxmeadow", "DMS x Meadow", "1.4.0")]
+    [BepInPlugin("dmsxmeadow", "DMSxMeadow", "1.4.0")]
     [BepInDependency("dressmyslugcat", BepInDependency.DependencyFlags.HardDependency)]
     [BepInDependency("henpemaz.rainmeadow", BepInDependency.DependencyFlags.HardDependency)]
     public class Plugin : BaseUnityPlugin
@@ -52,7 +52,7 @@ namespace DMSxMeadow
                 if (isInit) return;
                 isInit = true;
 
-                Plugin.Logger.LogInfo("[DMSxMeadow] Build 1.4.0 (13/08/2026: sección 'Name' en el selector de colores de historia — color de nombre en chat + luz de tubería independiente del color del cuerpo, sync via currentColors). Si NO ves esta línea, se está cargando un DLL viejo.");
+                Plugin.Logger.LogInfo("Build 1.4.0 (13/08/2026: sección 'Name' en el selector de colores de historia — color de nombre en chat + luz de tubería independiente del color del cuerpo, sync via currentColors). Si NO ves esta línea, se está cargando un DLL viejo.");
 
                 MachineConnector.SetRegisteredOI("dmsxmeadow", DMSxMeadowOptions.Instance);
                 DMSxMeadowOptions.Instance.EnsureConfigBound();
@@ -130,13 +130,13 @@ namespace DMSxMeadow
                         if (meadowCheckMethod != null && meadowCheckHookInfo != null)
                         {
                             meadowCheckHook = new Hook(meadowCheckMethod, meadowCheckHookInfo);
-                            Logger.LogDebug("[DMSxMeadow] DefaultMeadowHook override activado: se permitirá aplicar skins a jugadores remotos (DMS CheckForMeadowNonselfClient => false).");
+                            Logger.LogDebug("DefaultMeadowHook override activado: se permitirá aplicar skins a jugadores remotos (DMS CheckForMeadowNonselfClient => false).");
                         }
                     }
                 }
                 catch (Exception ex)
                 {
-                    Logger.LogWarning($"[DMSxMeadow] No se pudo resolver CheckForMeadowNonselfClient por reflexión: {ex.Message}");
+                    Logger.LogWarning($"No se pudo resolver CheckForMeadowNonselfClient por reflexión: {ex.Message}");
                 }
             }
             catch (Exception ex)
@@ -160,7 +160,7 @@ namespace DMSxMeadow
                 if (OnlineManager.lobby == null || !OnlineManager.lobby.isAvailable) return;
 
                 string slugcatName = playerGraphics.player.slugcatStats.name.value;
-                DMSNetworkTester.SkinSerializer.BroadcastHandshake(slugcatName);
+                SkinSerializer.BroadcastHandshake(slugcatName);
             }
             catch (Exception ex)
             {
@@ -213,7 +213,7 @@ namespace DMSxMeadow
                     MeadowInterfaceActive = true;
                     bool lobbyActive = OnlineManager.lobby != null && OnlineManager.lobby.isAvailable;
                     var (lobbySlugcat, lobbyMode) = lobbyActive ? ResolveLocalSlugcatName() : (null, null);
-                    Plugin.Logger.LogInfo($"[DMSxMeadow] 🎭 Interfaz Meadow detectada (proceso '{ID}', lobby {(lobbyActive ? "ACTIVA" : "sin lobby aún")}). Poll ON. Slugcat: '{lobbySlugcat ?? "sin resolver"}'{(lobbyMode != null ? $" (modo {lobbyMode})" : "")}.");
+                    Plugin.Logger.LogInfo($"🎭 Interfaz Meadow detectada (proceso '{ID}', lobby {(lobbyActive ? "ACTIVA" : "sin lobby aún")}). Poll ON. Slugcat: '{lobbySlugcat ?? "sin resolver"}'{(lobbyMode != null ? $" (modo {lobbyMode})" : "")}.");
                     return;
                 }
 
@@ -224,16 +224,16 @@ namespace DMSxMeadow
 
                     if (ID == ProcessManager.ProcessID.Game)
                     {
-                        Plugin.Logger.LogInfo("[DMSxMeadow] 🎮 Entrando a partida (proceso 'Game'): la memoria NO se libera — la descarga de skins continúa en segundo plano.");
+                        Plugin.Logger.LogInfo("🎮 Entrando a partida (proceso 'Game'): la memoria NO se libera — la descarga de skins continúa en segundo plano.");
                     }
                     else if (ID == ProcessManager.ProcessID.MainMenu)
                     {
                         int released = SkinRegistration.WipeAllMemory();
-                        Plugin.Logger.LogInfo($"[DMSxMeadow] 🚪 Volviste al MainMenu: wipe total del refactor ejecutado ({released} entradas liberadas). Poll OFF.");
+                        Plugin.Logger.LogInfo($"🚪 Volviste al MainMenu: wipe total del refactor ejecutado ({released} entradas liberadas). Poll OFF.");
                     }
                     else
                     {
-                        Plugin.Logger.LogInfo($"[DMSxMeadow] 🚪 Saliste de la interfaz Meadow (proceso actual: '{ID}'). Poll OFF — el wipe del refactor se dispara al volver al MainMenu.");
+                        Plugin.Logger.LogInfo($"🚪 Saliste de la interfaz Meadow (proceso actual: '{ID}'). Poll OFF — el wipe del refactor se dispara al volver al MainMenu.");
                     }
                 }
             }
@@ -263,7 +263,7 @@ namespace DMSxMeadow
                     if (playingAs == RainMeadow.RainMeadow.Ext_SlugcatStatsName.OnlineRandomSlugcat && !RandomSlugcatSkipLogged)
                     {
                         RandomSlugcatSkipLogged = true;
-                        Plugin.Logger.LogDebug("[DMSxMeadow] 🎲 Slugcat del lobby es 'MeadowRandom': se omite la emisión del handshake (se retoma al realizarse en partida).");
+                        Plugin.Logger.LogDebug("🎲 Slugcat del lobby es 'MeadowRandom': se omite la emisión del handshake (se retoma al realizarse en partida).");
                     }
                     return (null, "arena");
                 }
@@ -295,8 +295,8 @@ namespace DMSxMeadow
                 if (string.IsNullOrEmpty(slugcatName)) return;
 
                 LastEmittedLobbySlugcat = slugcatName;
-                Plugin.Logger.LogDebug($"[DMSxMeadow] Jugador {player.id} entró a la sala ({mode ?? "sin modo"}: '{slugcatName}'). Re-emitiendo handshake local hacia él...");
-                DMSNetworkTester.SkinSerializer.BroadcastHandshake(slugcatName);
+                Plugin.Logger.LogDebug($"Jugador {player.id} entró a la sala ({mode ?? "sin modo"}: '{slugcatName}'). Re-emitiendo handshake local hacia él...");
+                SkinSerializer.BroadcastHandshake(slugcatName);
             }
             catch (Exception ex)
             {
@@ -315,13 +315,13 @@ namespace DMSxMeadow
             {
                 if (player == null) return;
 
-                string steamId = DMSNetworkTester.SkinSerializer.GetPlayerSteamId(player);
+                string steamId = SkinSerializer.GetPlayerSteamId(player);
                 if (string.IsNullOrEmpty(steamId)) return;
 
-                DMSNetworkTester.SkinSerializer.ForgetPlayer(steamId);
+                SkinSerializer.ForgetPlayer(steamId);
                 SkinTransfer.ForgetPlayer(player);
 
-                Plugin.Logger.LogDebug($"[DMSxMeadow] Jugador {player.id} salió. Estado de transferencias y envíos purgados (su skin en memoria se conserva — DECISIONES §4).");
+                Plugin.Logger.LogDebug($"Jugador {player.id} salió. Estado de transferencias y envíos purgados (su skin en memoria se conserva — DECISIONES §4).");
             }
             catch (Exception ex)
             {
@@ -338,13 +338,13 @@ namespace DMSxMeadow
 
             try
             {
-                DMSNetworkTester.SkinSerializer.ForgetAllPlayers();
+                SkinSerializer.ForgetAllPlayers();
                 SkinTransfer.ClearAllTransfers();
                 PendingRecreateSteamIds.Clear();
                 RealizedPlayersBySteamId.Clear();
                 LastNoSlugLogBySteamId.Clear();
 
-                Plugin.Logger.LogDebug($"[DMSxMeadow] 🧹 Sesión terminada: customizaciones y transferencias purgadas (skins en memoria se conservan hasta volver al MainMenu — DECISIONES §4).");
+                Plugin.Logger.LogDebug($"🧹 Sesión terminada: customizaciones y transferencias purgadas (skins en memoria se conservan hasta volver al MainMenu — DECISIONES §4).");
             }
             catch (Exception ex)
             {
@@ -368,8 +368,8 @@ namespace DMSxMeadow
                         {
                             LastEmittedLobbySlugcat = slugcat;
                             SkinTransfer.AbortAllOutgoing();
-                            Plugin.Logger.LogDebug("[DMSxMeadow] 🎭 Cambio de flag de compartir detectado. Re-emitiendo handshake...");
-                            DMSNetworkTester.SkinSerializer.BroadcastHandshake(slugcat);
+                            Plugin.Logger.LogDebug("🎭 Cambio de flag de compartir detectado. Re-emitiendo handshake...");
+                            SkinSerializer.BroadcastHandshake(slugcat);
                         }
                     }
                 }
@@ -385,8 +385,8 @@ namespace DMSxMeadow
                             {
                                 LastEmittedLobbySlugcat = lobbySlugcat;
                                 SkinTransfer.AbortAllOutgoing();
-                                Plugin.Logger.LogDebug($"[DMSxMeadow] 🎭 Cambio de slugcat en lobby detectado: '{lobbySlugcat}'. Re-emitiendo handshake (los envíos en curso de la skin anterior fueron abortados)...");
-                                DMSNetworkTester.SkinSerializer.BroadcastHandshake(lobbySlugcat);
+                                Plugin.Logger.LogDebug($"🎭 Cambio de slugcat en lobby detectado: '{lobbySlugcat}'. Re-emitiendo handshake (los envíos en curso de la skin anterior fueron abortados)...");
+                                SkinSerializer.BroadcastHandshake(lobbySlugcat);
                             }
                         }
                         else
@@ -400,7 +400,7 @@ namespace DMSxMeadow
                     LastEmittedLobbySlugcat = null;
                 }
 
-                DMSNetworkTester.SkinSerializer.PollMissingHandshakes();
+                SkinSerializer.PollMissingHandshakes();
 
                 SkinTransfer.UpdatePendingTransfers();
                 SkinTransfer.RetryPendingRequests();
@@ -444,7 +444,7 @@ namespace DMSxMeadow
             if (TryRecreateFromCache(steamId)) return;
 
             PendingRecreateSteamIds.Add(steamId);
-            Logger.LogDebug($"[DMSxMeadow] ⏳ Recreación diferida para {steamId} (se reintentará en el próximo Update).");
+            Logger.LogDebug($"⏳ Recreación diferida para {steamId} (se reintentará en el próximo Update).");
         }
 
         internal static void ScheduleRecreateAllSlugs()
@@ -452,7 +452,7 @@ namespace DMSxMeadow
             int scheduled = 0;
             foreach (var player in OnlineManager.players)
             {
-                string steamId = DMSNetworkTester.SkinSerializer.GetPlayerSteamId(player);
+                string steamId = SkinSerializer.GetPlayerSteamId(player);
                 if (string.IsNullOrEmpty(steamId)) continue;
 
                 if (TryRecreateFromCache(steamId))
@@ -467,7 +467,7 @@ namespace DMSxMeadow
 
             if (scheduled > 0)
             {
-                Logger.LogDebug($"[DMSxMeadow] 🔄 Recreación de {scheduled} slug(s) programada tras la recarga de atlas (evita sprites inválidos).");
+                Logger.LogDebug($"🔄 Recreación de {scheduled} slug(s) programada tras la recarga de atlas (evita sprites inválidos).");
             }
         }
 
@@ -487,7 +487,7 @@ namespace DMSxMeadow
                 && DressMySlugcat.Hooks.PlayerGraphicsHooks.PlayerGraphicsData.TryGetValue(pg, out var data))
             {
                 data.ScheduleForRecreation = true;
-                Logger.LogDebug($"[DMSxMeadow] 🔁 Recreación de gráficos programada para el slug de {steamId} (playerNumber {player.playerState?.playerNumber ?? -1}).");
+                Logger.LogDebug($"🔁 Recreación de gráficos programada para el slug de {steamId} (playerNumber {player.playerState?.playerNumber ?? -1}).");
                 return true;
             }
 
@@ -511,7 +511,7 @@ namespace DMSxMeadow
                     if (absPlayer?.realizedCreature is not Player player) continue;
 
                     if (!RainMeadow.OnlinePhysicalObject.map.TryGetValue(absPlayer, out var onlineEntity)) continue;
-                    if (!string.Equals(DMSNetworkTester.SkinSerializer.GetPlayerSteamId(onlineEntity.owner), steamId, StringComparison.Ordinal)) continue;
+                    if (!string.Equals(SkinSerializer.GetPlayerSteamId(onlineEntity.owner), steamId, StringComparison.Ordinal)) continue;
 
                     foundSlug = true;
                     if (ScheduleRecreationFor(player, steamId))
@@ -526,7 +526,7 @@ namespace DMSxMeadow
                     if (!LastNoSlugLogBySteamId.TryGetValue(steamId, out float last) || now - last > 5f)
                     {
                         LastNoSlugLogBySteamId[steamId] = now;
-                        Logger.LogDebug($"[DMSxMeadow] Sin slug realizado del jugador {steamId} en el juego. No hay nada que recrear por ahora.");
+                        Logger.LogDebug($"Sin slug realizado del jugador {steamId} en el juego. No hay nada que recrear por ahora.");
                     }
                 }
 
@@ -578,7 +578,7 @@ namespace DMSxMeadow
                             {
                                 if (DefaultSkinDebugLogged.Add("banned|" + steamId + "|" + slugcatName))
                                 {
-                                    Plugin.Logger.LogDebug($"[DMSxMeadow] Slug de {steamId} ({slugcatName}) baneado localmente: aplicando skin default (la cola se conserva para evitar que se estire).");
+                                    Plugin.Logger.LogDebug($"Slug de {steamId} ({slugcatName}) baneado localmente: aplicando skin default (la cola se conserva para evitar que se estire).");
                                 }
 
                                 // Strip only the custom skin parts, keep the tail geometry: changing tail
@@ -586,7 +586,7 @@ namespace DMSxMeadow
                                 var bannedCustomization = MeadowProfileManager.GetCustomizationBySteamID(steamId, slugcatName);
                                 if (bannedCustomization == null)
                                 {
-                                    bannedCustomization = DMSNetworkTester.SkinSerializer.GetReceivedCustomization(steamId, slugcatName);
+                                    bannedCustomization = SkinSerializer.GetReceivedCustomization(steamId, slugcatName);
                                 }
 
                                 if (bannedCustomization != null)
@@ -610,7 +610,7 @@ namespace DMSxMeadow
                             var customization = MeadowProfileManager.GetCustomizationBySteamID(steamId, slugcatName);
                             if (customization == null)
                             {
-                                customization = DMSNetworkTester.SkinSerializer.GetReceivedCustomization(steamId, slugcatName);
+                                customization = SkinSerializer.GetReceivedCustomization(steamId, slugcatName);
                             }
 
                             if (customization != null)
@@ -624,7 +624,7 @@ namespace DMSxMeadow
                             {
                                 if (DefaultSkinDebugLogged.Add(steamId + "|" + slugcatName))
                                 {
-                                    Plugin.Logger.LogDebug($"[DMSxMeadow] Slug remoto {steamId} ({slugcatName}) sin customización. Aplicando skin default limpia.");
+                                    Plugin.Logger.LogDebug($"Slug remoto {steamId} ({slugcatName}) sin customización. Aplicando skin default limpia.");
                                 }
                                 var clean = new DressMySlugcat.Customization
                                 {
@@ -638,7 +638,7 @@ namespace DMSxMeadow
                             {
                                 if (DefaultSkinDebugLogged.Add("local-clean|" + slugcatName))
                                 {
-                                    Plugin.Logger.LogDebug($"[DMSxMeadow] Slug local ({slugcatName}) sin entrada en SaveManager. Aplicando skin default limpia (evita NRE de DMS).");
+                                    Plugin.Logger.LogDebug($"Slug local ({slugcatName}) sin entrada en SaveManager. Aplicando skin default limpia (evita NRE de DMS).");
                                 }
                                 var clean = new DressMySlugcat.Customization
                                 {
@@ -664,7 +664,7 @@ namespace DMSxMeadow
                 {
                     if (DefaultSkinDebugLogged.Add("fallback-clean|" + player.slugcatStats.name.value))
                     {
-                        Plugin.Logger.LogDebug($"[DMSxMeadow] Fallback sin entrada en SaveManager ({player.slugcatStats.name.value}). Aplicando skin default limpia.");
+                        Plugin.Logger.LogDebug($"Fallback sin entrada en SaveManager ({player.slugcatStats.name.value}). Aplicando skin default limpia.");
                     }
                     return new DressMySlugcat.Customization
                     {
@@ -690,7 +690,7 @@ namespace DMSxMeadow
             }
             catch (Exception ex)
             {
-                Plugin.Logger.LogWarning($"[DMSxMeadow] No se pudo consultar SaveManager.Customizations: {ex.Message}");
+                Plugin.Logger.LogWarning($"No se pudo consultar SaveManager.Customizations: {ex.Message}");
                 return false;
             }
         }
@@ -707,7 +707,7 @@ namespace DMSxMeadow
             }
             catch (Exception ex)
             {
-                Plugin.Logger.LogWarning($"[DMSxMeadow] No se pudo leer DefaultMeadowSkins: {ex.Message}");
+                Plugin.Logger.LogWarning($"No se pudo leer DefaultMeadowSkins: {ex.Message}");
             }
 
             return false;

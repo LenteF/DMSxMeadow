@@ -63,14 +63,14 @@ private const float HeadSizeMultiplier = 1f;
                     .GetConstructor(new[] { typeof(ProcessManager) });
                 if (ctor == null)
                 {
-                    Plugin.Logger.LogWarning("[DMSxMeadow] No se encontró StoryOnlineMenu(ProcessManager) (API de Rain Meadow cambiada): indicador ShareSkin desactivado.");
+                    Plugin.Logger.LogWarning("No se encontró StoryOnlineMenu(ProcessManager) (API de Rain Meadow cambiada): indicador ShareSkin desactivado.");
                     return;
                 }
 
                 MethodInfo hookMethod = typeof(StoryLobbyShareSkinIndicator)
                     .GetMethod(nameof(StoryOnlineMenu_Ctor), BindingFlags.NonPublic | BindingFlags.Static);
                 storyMenuCtorHook = new Hook(ctor, hookMethod);
-                Plugin.Logger.LogDebug("[DMSxMeadow] Indicador ShareSkin del lobby de historia activado (solo se muestra con ShareSkin ON).");
+                Plugin.Logger.LogDebug("Indicador ShareSkin del lobby de historia activado (solo se muestra con ShareSkin ON).");
 
                 ConstructorInfo arenaCtor = typeof(ArenaOnlineLobbyMenu)
                     .GetConstructor(new[] { typeof(ProcessManager) });
@@ -79,12 +79,12 @@ private const float HeadSizeMultiplier = 1f;
                     MethodInfo arenaHookMethod = typeof(StoryLobbyShareSkinIndicator)
                         .GetMethod(nameof(ArenaOnlineLobbyMenu_Ctor), BindingFlags.NonPublic | BindingFlags.Static);
                     arenaMenuCtorHook = new Hook(arenaCtor, arenaHookMethod);
-                    Plugin.Logger.LogDebug("[DMSxMeadow] Indicador ShareSkin del lobby de arena activado (solo se muestra con ShareSkin ON).");
+                    Plugin.Logger.LogDebug("Indicador ShareSkin del lobby de arena activado (solo se muestra con ShareSkin ON).");
                 }
             }
             catch (Exception ex)
             {
-                Plugin.Logger.LogError($"[DMSxMeadow] Error inicializando indicador ShareSkin del lobby: {ex}");
+                Plugin.Logger.LogError($"Error inicializando indicador ShareSkin del lobby: {ex}");
             }
         }
 
@@ -122,7 +122,7 @@ private const float HeadSizeMultiplier = 1f;
             }
             catch (Exception ex)
             {
-                Plugin.Logger.LogError($"[DMSxMeadow] Error creando indicador ShareSkin del lobby: {ex}");
+                Plugin.Logger.LogError($"Error creando indicador ShareSkin del lobby: {ex}");
             }
         }
 
@@ -309,7 +309,7 @@ private const float HeadSizeMultiplier = 1f;
                 }
                 catch (Exception ex)
                 {
-                    Plugin.Logger.LogError($"[DMSxMeadow] Error en poll del indicador ShareSkin: {ex.Message}");
+                    Plugin.Logger.LogError($"Error en poll del indicador ShareSkin: {ex.Message}");
                 }
             }
 
@@ -467,7 +467,7 @@ private const float HeadSizeMultiplier = 1f;
                 FAtlasElement iconElement = Futile.atlasManager.GetElementWithName(OffShareSkinSymbol);
                 if (iconElement == null)
                 {
-                    Plugin.Logger.LogWarning($"[DMSxMeadow] No se encontró el elemento '{OffShareSkinSymbol}' en el catálogo del juego: indicador ShareSkin OFF sin icono.");
+                    Plugin.Logger.LogWarning($"No se encontró el elemento '{OffShareSkinSymbol}' en el catálogo del juego: indicador ShareSkin OFF sin icono.");
                     return false;
                 }
 
@@ -642,7 +642,7 @@ private const float HeadSizeMultiplier = 1f;
                 }
                 catch (Exception ex)
                 {
-                    Plugin.Logger.LogDebug($"[DMSxMeadow] No se pudo construir la capa del glow: {ex.Message}");
+                    Plugin.Logger.LogDebug($"No se pudo construir la capa del glow: {ex.Message}");
                 }
             }
 
@@ -714,7 +714,7 @@ private const float HeadSizeMultiplier = 1f;
                 }
                 catch (Exception ex)
                 {
-                    Plugin.Logger.LogDebug($"[DMSxMeadow] No se pudieron resolver las piezas de cabeza de '{slugcat}': {ex.Message}");
+                    Plugin.Logger.LogDebug($"No se pudieron resolver las piezas de cabeza de '{slugcat}': {ex.Message}");
                 }
             }
 
@@ -722,7 +722,7 @@ private const float HeadSizeMultiplier = 1f;
             {
                 try
                 {
-                    var customization = MeadowProfileManager.GetCustomizationBySteamID(DMSNetworkTester.SkinSerializer.GetLocalSteamId(), slugcat);
+                    var customization = MeadowProfileManager.GetCustomizationBySteamID(SkinSerializer.GetLocalSteamId(), slugcat);
                     if (customization == null)
                     {
                         customization = Customization.For(slugcat);
@@ -746,7 +746,7 @@ private const float HeadSizeMultiplier = 1f;
                 color = default;
                 try
                 {
-                    var customization = MeadowProfileManager.GetCustomizationBySteamID(DMSNetworkTester.SkinSerializer.GetLocalSteamId(), slugcat);
+                    var customization = MeadowProfileManager.GetCustomizationBySteamID(SkinSerializer.GetLocalSteamId(), slugcat);
                     if (customization == null)
                     {
                         customization = Customization.For(slugcat);
@@ -1046,14 +1046,14 @@ private const float HeadSizeMultiplier = 1f;
                     string txtPath = Path.Combine(basePath, "head.txt");
                     if (!File.Exists(pngPath) || !File.Exists(txtPath))
                     {
-                        Plugin.Logger.LogDebug($"[DMSxMeadow] No se encontró 'ui\\{HeadPngName}' o 'ui\\head.txt': glow de skin default desactivado.");
+                        Plugin.Logger.LogDebug($"No se encontró 'ui\\{HeadPngName}' o 'ui\\head.txt': glow de skin default desactivado.");
                         return false;
                     }
 
                     Texture2D texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
                     if (!texture.LoadImage(File.ReadAllBytes(pngPath)))
                     {
-                        Plugin.Logger.LogDebug($"[DMSxMeadow] No se pudo decodificar '{pngPath}': glow de skin default desactivado.");
+                        Plugin.Logger.LogDebug($"No se pudo decodificar '{pngPath}': glow de skin default desactivado.");
                         return false;
                     }
 
@@ -1062,7 +1062,7 @@ private const float HeadSizeMultiplier = 1f;
                     if (!TryParseTexturePackerFrame(txtPath, "HeadA0.png", out int rx, out int ry, out int rw, out int rh)
                         || rw <= 0 || rh <= 0)
                     {
-                        Plugin.Logger.LogDebug($"[DMSxMeadow] No se pudo parsear el rect de HeadA0 en ui\\head.txt: glow de skin default desactivado.");
+                        Plugin.Logger.LogDebug($"No se pudo parsear el rect de HeadA0 en ui\\head.txt: glow de skin default desactivado.");
                         UnityEngine.Object.Destroy(texture);
                         return false;
                     }
@@ -1096,7 +1096,7 @@ private const float HeadSizeMultiplier = 1f;
                 }
                 catch (Exception ex)
                 {
-                    Plugin.Logger.LogDebug($"[DMSxMeadow] No se pudo cargar el head default '{HeadPngName}': {ex.Message}");
+                    Plugin.Logger.LogDebug($"No se pudo cargar el head default '{HeadPngName}': {ex.Message}");
                     return false;
                 }
             }
@@ -1230,7 +1230,7 @@ private const float HeadSizeMultiplier = 1f;
 
                 try
                 {
-                    var customization = MeadowProfileManager.GetCustomizationBySteamID(DMSNetworkTester.SkinSerializer.GetLocalSteamId(), slugcat);
+                    var customization = MeadowProfileManager.GetCustomizationBySteamID(SkinSerializer.GetLocalSteamId(), slugcat);
                     if (customization == null)
                     {
                         customization = Customization.For(slugcat);
@@ -1261,7 +1261,7 @@ private const float HeadSizeMultiplier = 1f;
                 }
                 catch (Exception ex)
                 {
-                    Plugin.Logger.LogDebug($"[DMSxMeadow] No se pudo resolver el elemento '{elementName}' de '{slugcat}' para el indicador ShareSkin: {ex.Message}");
+                    Plugin.Logger.LogDebug($"No se pudo resolver el elemento '{elementName}' de '{slugcat}' para el indicador ShareSkin: {ex.Message}");
                     return false;
                 }
             }

@@ -35,7 +35,7 @@ namespace DMSxMeadow
             }
             catch (Exception ex)
             {
-                Plugin.Logger.LogError($"[DMSxMeadow] No se resolvieron los campos privados de ShortcutGraphics: {ex.Message}");
+                Plugin.Logger.LogError($"No se resolvieron los campos privados de ShortcutGraphics: {ex.Message}");
             }
 
             try
@@ -53,12 +53,12 @@ namespace DMSxMeadow
                 }
                 else
                 {
-                    Plugin.Logger.LogWarning("[DMSxMeadow] No se resolvió ChatLogManager.GetDisplayPlayerColor (API de Rain Meadow cambiada): color de nombre en chat desactivado.");
+                    Plugin.Logger.LogWarning("No se resolvió ChatLogManager.GetDisplayPlayerColor (API de Rain Meadow cambiada): color de nombre en chat desactivado.");
                 }
             }
             catch (Exception ex)
             {
-                Plugin.Logger.LogWarning($"[DMSxMeadow] No se pudo enganchar ChatLogManager.GetDisplayPlayerColor: {ex.Message}");
+                Plugin.Logger.LogWarning($"No se pudo enganchar ChatLogManager.GetDisplayPlayerColor: {ex.Message}");
             }
 
             try
@@ -75,12 +75,12 @@ namespace DMSxMeadow
                 }
                 else
                 {
-                    Plugin.Logger.LogWarning("[DMSxMeadow] No se resolvió SlugcatCustomization.SlugcatColor (API de Rain Meadow cambiada): nombre flotante sin color de identidad.");
+                    Plugin.Logger.LogWarning("No se resolvió SlugcatCustomization.SlugcatColor (API de Rain Meadow cambiada): nombre flotante sin color de identidad.");
                 }
             }
             catch (Exception ex)
             {
-                Plugin.Logger.LogWarning($"[DMSxMeadow] No se pudo enganchar SlugcatCustomization.SlugcatColor: {ex.Message}");
+                Plugin.Logger.LogWarning($"No se pudo enganchar SlugcatCustomization.SlugcatColor: {ex.Message}");
             }
 
             try
@@ -97,15 +97,15 @@ namespace DMSxMeadow
                 }
                 else
                 {
-                    Plugin.Logger.LogWarning("[DMSxMeadow] No se resolvió OnlinePlayerDisplay.ctor (API de Rain Meadow cambiada): refuerzo del nombre flotante desactivado.");
+                    Plugin.Logger.LogWarning("No se resolvió OnlinePlayerDisplay.ctor (API de Rain Meadow cambiada): refuerzo del nombre flotante desactivado.");
                 }
             }
             catch (Exception ex)
             {
-                Plugin.Logger.LogWarning($"[DMSxMeadow] No se pudo enganchar OnlinePlayerDisplay.ctor: {ex.Message}");
+                Plugin.Logger.LogWarning($"No se pudo enganchar OnlinePlayerDisplay.ctor: {ex.Message}");
             }
 
-            Plugin.Logger.LogDebug("[DMSxMeadow] 🎨 Sección 'Identity' activa en sesiones de Meadow (color de nombre en chat + nombre flotante + luz de tubería, sync por currentColors de Meadow).");
+            Plugin.Logger.LogDebug("🎨 Sección 'Identity' activa en sesiones de Meadow (color de nombre en chat + nombre flotante + luz de tubería, sync por currentColors de Meadow).");
         }
 
         public static void Dispose()
@@ -140,7 +140,7 @@ namespace DMSxMeadow
             }
             catch (Exception ex)
             {
-                Plugin.Logger.LogError($"[DMSxMeadow] ColoredBodyPartList hook error: {ex.Message}");
+                Plugin.Logger.LogError($"ColoredBodyPartList hook error: {ex.Message}");
             }
             return list;
         }
@@ -158,7 +158,7 @@ namespace DMSxMeadow
             }
             catch (Exception ex)
             {
-                Plugin.Logger.LogError($"[DMSxMeadow] DefaultBodyPartColorHex hook error: {ex.Message}");
+                Plugin.Logger.LogError($"DefaultBodyPartColorHex hook error: {ex.Message}");
             }
             return list;
         }
@@ -186,7 +186,7 @@ namespace DMSxMeadow
             }
             catch (Exception ex)
             {
-                Plugin.Logger.LogDebug($"[DMSxMeadow] GetNameColorIndex error: {ex.Message}");
+                Plugin.Logger.LogDebug($"GetNameColorIndex error: {ex.Message}");
             }
 
             return index;
@@ -253,7 +253,7 @@ namespace DMSxMeadow
             }
             catch (Exception ex)
             {
-                Plugin.Logger.LogError($"[DMSxMeadow] ShortcutGraphics.Draw hook error: {ex.Message}");
+                Plugin.Logger.LogError($"ShortcutGraphics.Draw hook error: {ex.Message}");
             }
         }
 
@@ -287,7 +287,7 @@ namespace DMSxMeadow
             }
             catch (Exception ex)
             {
-                Plugin.Logger.LogError($"[DMSxMeadow] GetDisplayPlayerColor hook error: {ex.Message}");
+                Plugin.Logger.LogError($"GetDisplayPlayerColor hook error: {ex.Message}");
             }
             return color;
         }
@@ -310,7 +310,7 @@ namespace DMSxMeadow
             }
             catch (Exception ex)
             {
-                Plugin.Logger.LogError($"[DMSxMeadow] SlugcatColor hook error: {ex.Message}");
+                Plugin.Logger.LogError($"SlugcatColor hook error: {ex.Message}");
             }
             return color;
         }
@@ -340,7 +340,7 @@ namespace DMSxMeadow
                     if (!loggedCtorIdentificationFail)
                     {
                         loggedCtorIdentificationFail = true;
-                        Plugin.Logger.LogDebug($"[DMSxMeadow] OnlinePlayerDisplay sin color de identidad (playingAs={customization.playingAs?.value ?? "null"}, currentColors={customization.currentColors?.Count ?? 0}) — se mantiene el color del cuerpo.");
+                        Plugin.Logger.LogDebug($"OnlinePlayerDisplay sin color de identidad (playingAs={customization.playingAs?.value ?? "null"}, currentColors={customization.currentColors?.Count ?? 0}) — se mantiene el color del cuerpo.");
                     }
                     return;
                 }
@@ -370,12 +370,12 @@ namespace DMSxMeadow
                 if (!loggedCtorApply)
                 {
                     loggedCtorApply = true;
-                    Plugin.Logger.LogDebug("[DMSxMeadow] Color de identidad aplicado al nombre flotante (OnlinePlayerDisplay.ctor).");
+                    Plugin.Logger.LogDebug("Color de identidad aplicado al nombre flotante (OnlinePlayerDisplay.ctor).");
                 }
             }
             catch (Exception ex)
             {
-                Plugin.Logger.LogError($"[DMSxMeadow] OnlinePlayerDisplay ctor hook error: {ex.Message}");
+                Plugin.Logger.LogError($"OnlinePlayerDisplay ctor hook error: {ex.Message}");
             }
         }
     }

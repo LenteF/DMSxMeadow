@@ -221,7 +221,7 @@ namespace DMSxMeadow
                     Plugin.Logger.LogDebug($"[DMSxMeadow] Checkbox 'solo amigos': {(parsed ? "ON" : "OFF")} — escrito al archivo al instante.");
                     if (changed && parsed)
                     {
-                        DMSNetworkTester.SkinSerializer.ForgetAllPlayers();
+                        SkinSerializer.ForgetAllPlayers();
                         SkinTransfer.ClearAllTransfers();
                         Plugin.ScheduleRecreateAllSlugs();
                         Plugin.Logger.LogDebug("[DMSxMeadow] 🤝 'Solo amigos' activado: skins de no-amigos purgadas y slugs de la sala recreados a default.");
@@ -583,7 +583,7 @@ namespace DMSxMeadow
                 if (removed)
                 {
                     Plugin.Logger.LogInfo($"[DMSxMeadow] 🚫 {identity} quitada de la lista negra (desbaneado). Solicitando re-handshake...");
-                    DMSNetworkTester.SkinSerializer.RequestHandshakeFrom(identity);
+                    SkinSerializer.RequestHandshakeFrom(identity);
                 }
                 RefreshBannedList();
             }

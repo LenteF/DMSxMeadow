@@ -53,7 +53,7 @@ namespace DMSxMeadow
 
             if (!trimmed.StartsWith("{", StringComparison.Ordinal) && !trimmed.StartsWith("[", StringComparison.Ordinal))
             {
-                Plugin.Logger.LogWarning($"[DMSxMeadow] ⚠️ 3a estricto: .txt '{fileName}' no parece JSON de TexturePacker. Se trata como misc (tope 522).");
+                Plugin.Logger.LogWarning($"⚠️ 3a estricto: .txt '{fileName}' no parece JSON de TexturePacker. Se trata como misc (tope 522).");
                 return PartKind.Misc;
             }
 
@@ -178,7 +178,7 @@ namespace DMSxMeadow
             int height;
             if (!TryReadPngSize(pngBytes, out width, out height))
             {
-                Plugin.Logger.LogWarning($"[DMSxMeadow] ⛔ 3a estricto: '{pngName}' ({transferKey}) no es un PNG válido (< 24 B o firma IHDR incorrecta). Transferencia rechazada -> skin por defecto.");
+                Plugin.Logger.LogWarning($"⛔ 3a estricto: '{pngName}' ({transferKey}) no es un PNG válido (< 24 B o firma IHDR incorrecta). Transferencia rechazada -> skin por defecto.");
                 return false;
             }
 
@@ -187,7 +187,7 @@ namespace DMSxMeadow
 
             if (width <= limit.x && height <= limit.y) return true;
 
-            Plugin.Logger.LogWarning($"[DMSxMeadow] ⛔ 3a estricto: '{pngName}' ({transferKey}) rechazado — parte '{part}', dimensiones {width}x{height} > tope {limit.x}x{limit.y}. Transferencia rechazada -> skin por defecto (RNF-3).");
+            Plugin.Logger.LogWarning($"⛔ 3a estricto: '{pngName}' ({transferKey}) rechazado — parte '{part}', dimensiones {width}x{height} > tope {limit.x}x{limit.y}. Transferencia rechazada -> skin por defecto (RNF-3).");
             return false;
         }
 

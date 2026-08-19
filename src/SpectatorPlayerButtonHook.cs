@@ -26,7 +26,7 @@ namespace DMSxMeadow
                 .GetMethod("Update", BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
             if (updateMethod == null)
             {
-                Plugin.Logger.LogWarning("[DMSxMeadow] No se encontró SpectatorOverlay.Update (API de Rain Meadow cambiada): botón placeholder desactivado.");
+                Plugin.Logger.LogWarning("No se encontró SpectatorOverlay.Update (API de Rain Meadow cambiada): botón placeholder desactivado.");
                 return;
             }
 
@@ -34,7 +34,7 @@ namespace DMSxMeadow
                 .GetMethod(nameof(SpectatorOverlay_Update), BindingFlags.NonPublic | BindingFlags.Static);
 
             spectatorUpdateHook = new Hook(updateMethod, hookMethod);
-            Plugin.Logger.LogDebug("[DMSxMeadow] Hook del overlay de espectador activado (botón placeholder por jugador tras el 'x').");
+            Plugin.Logger.LogDebug("Hook del overlay de espectador activado (botón placeholder por jugador tras el 'x').");
         }
 
         private static void SpectatorOverlay_Update(Action<SpectatorOverlay> orig, SpectatorOverlay self)
@@ -53,7 +53,7 @@ namespace DMSxMeadow
 
                     if (PlaceholdersByButton.TryGetValue(playerButton, out _)) continue;
 
-                    string steamId = DMSNetworkTester.SkinSerializer.GetPlayerSteamId(playerButton.player);
+                    string steamId = SkinSerializer.GetPlayerSteamId(playerButton.player);
                     string displayName = playerButton.player.id?.DisplayName ?? "";
                     bool banned = SkinBanManager.IsBanned(steamId);
 
@@ -76,12 +76,12 @@ namespace DMSxMeadow
                             SkinTransfer.ForgetPlayer(playerButton.player);
                             SkinRegistration.ForgetSender(steamId);
                             Plugin.ScheduleRecreateForSteamId(steamId);
-                            Plugin.Logger.LogInfo($"[DMSxMeadow] 🚫 Skin de '{displayName}' ({steamId}) BANEADA localmente (permanente en blacklist.txt). Su skin ya no se descarga ni se aplica (la cola se conserva).");
+                            Plugin.Logger.LogInfo($"🚫 Skin de '{displayName}' ({steamId}) BANEADA localmente (permanente en blacklist.txt). Su skin ya no se descarga ni se aplica (la cola se conserva).");
                         }
                         else
                         {
-                            Plugin.Logger.LogInfo($"[DMSxMeadow] ✅ Skin de '{displayName}' ({steamId}) desbaneada. Solicitando re-handshake...");
-                            DMSNetworkTester.SkinSerializer.RequestHandshakeFrom(steamId);
+                            Plugin.Logger.LogInfo($"✅ Skin de '{displayName}' ({steamId}) desbaneada. Solicitando re-handshake...");
+                            SkinSerializer.RequestHandshakeFrom(steamId);
                         }
 
                         banSkinButton.UpdateSymbol(nowBanned ? BannedSymbol : BanSymbol);
@@ -92,12 +92,12 @@ namespace DMSxMeadow
 
                     playerButton.subObjects.Add(banSkinButton);
                     PlaceholdersByButton.Add(playerButton, banSkinButton);
-                    Plugin.Logger.LogDebug($"[DMSxMeadow] Botón de ban de skin añadido a la fila de {playerButton.player.id} ({(banned ? "baneado" : "activo")}).");
+                    Plugin.Logger.LogDebug($"Botón de ban de skin añadido a la fila de {playerButton.player.id} ({(banned ? "baneado" : "activo")}).");
                 }
             }
             catch (Exception ex)
             {
-                Plugin.Logger.LogError($"[DMSxMeadow] Hook error (SpectatorOverlay.Update): {ex}");
+                Plugin.Logger.LogError($"Hook error (SpectatorOverlay.Update): {ex}");
             }
         }
 
