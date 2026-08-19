@@ -71,7 +71,7 @@ namespace DMSxMeadow
             catch (Exception ex)
             {
                 string what = key == "shareSkin" ? "de compartir" : "'solo amigos'";
-                Plugin.Logger.LogError($"[DMSxMeadow] Error leyendo el flag {what} del archivo de config: {ex.Message}");
+                Plugin.Logger.LogError($"Error leyendo el flag {what} del archivo de config: {ex.Message}");
             }
             return false;
         }
@@ -95,11 +95,11 @@ namespace DMSxMeadow
                 _shareSkinConfig.Value = ShareSkinEnabled;
                 _friendsOnlyConfig.Value = FriendsOnlyEnabled;
 
-                Plugin.Logger.LogDebug($"[DMSxMeadow] Flags (fuente: ModConfigs/dmsxmeadow.txt): ShareSkin={ShareSkinEnabled}, SoloAmigos={FriendsOnlyEnabled}");
+                Plugin.Logger.LogDebug($"Flags (fuente: ModConfigs/dmsxmeadow.txt): ShareSkin={ShareSkinEnabled}, SoloAmigos={FriendsOnlyEnabled}");
             }
             catch (Exception ex)
             {
-                Plugin.Logger.LogWarning($"[DMSxMeadow] No se pudo bindear temprano el flag de compartir: {ex.Message}");
+                Plugin.Logger.LogWarning($"No se pudo bindear temprano el flag de compartir: {ex.Message}");
             }
         }
 
@@ -118,7 +118,7 @@ namespace DMSxMeadow
             catch (Exception ex)
             {
                 string what = key == "shareSkin" ? "de compartir" : "'solo amigos'";
-                Plugin.Logger.LogError($"[DMSxMeadow] Error escribiendo el flag {what} al archivo de config: {ex.Message}");
+                Plugin.Logger.LogError($"Error escribiendo el flag {what} al archivo de config: {ex.Message}");
             }
         }
 
@@ -189,7 +189,7 @@ namespace DMSxMeadow
                 {
                     bool changed = parsed != ShareSkinEnabled;
                     WriteBoolToConfigFile("shareSkin", parsed);
-                    Plugin.Logger.LogDebug($"[DMSxMeadow] Checkbox de compartir: {(parsed ? "ON" : "OFF")} — escrito al archivo al instante{(changed ? ", re-emitiendo handshake." : " (sin cambio real).")}");
+                    Plugin.Logger.LogDebug($"Checkbox de compartir: {(parsed ? "ON" : "OFF")} — escrito al archivo al instante{(changed ? ", re-emitiendo handshake." : " (sin cambio real).")}");
                     if (changed)
                     {
                         Plugin.RequestHandshakeReemit();
@@ -218,13 +218,13 @@ namespace DMSxMeadow
                 {
                     bool changed = parsed != FriendsOnlyEnabled;
                     WriteBoolToConfigFile("friendsOnly", parsed);
-                    Plugin.Logger.LogDebug($"[DMSxMeadow] Checkbox 'solo amigos': {(parsed ? "ON" : "OFF")} — escrito al archivo al instante.");
+                    Plugin.Logger.LogDebug($"Checkbox 'solo amigos': {(parsed ? "ON" : "OFF")} — escrito al archivo al instante.");
                     if (changed && parsed)
                     {
                         SkinSerializer.ForgetAllPlayers();
                         SkinTransfer.ClearAllTransfers();
                         Plugin.ScheduleRecreateAllSlugs();
-                        Plugin.Logger.LogDebug("[DMSxMeadow] 🤝 'Solo amigos' activado: skins de no-amigos purgadas y slugs de la sala recreados a default.");
+                        Plugin.Logger.LogDebug("🤝 'Solo amigos' activado: skins de no-amigos purgadas y slugs de la sala recreados a default.");
                     }
                 }
             };
@@ -582,7 +582,7 @@ namespace DMSxMeadow
                 bool removed = SkinBanManager.RemoveBan(identity);
                 if (removed)
                 {
-                    Plugin.Logger.LogInfo($"[DMSxMeadow] 🚫 {identity} quitada de la lista negra (desbaneado). Solicitando re-handshake...");
+                    Plugin.Logger.LogInfo($"🚫 {identity} quitada de la lista negra (desbaneado). Solicitando re-handshake...");
                     SkinSerializer.RequestHandshakeFrom(identity);
                 }
                 RefreshBannedList();
