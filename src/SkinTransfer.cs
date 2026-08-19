@@ -7,45 +7,25 @@ using UnityEngine;
 
 namespace DMSxMeadow
 {
-    /// <summary>
-    /// Transporte CustomPacket (canal 1) para archivos de skin.
-    ///
-    /// FIX: la versión original mandaba todos los archivos de una skin en el
-    /// mismo frame, de forma síncrona, y sin ningún ACK/reintento propio.
-    /// Se detectaron dos causas de pérdida:
-    ///
-    ///  1) OnlineManager.SendCustomData (Rain Meadow) descarta el envío EN SILENCIO
-    ///     si el emisor todavía no tiene sincronizado el CustomClientSettings del
-    ///     receptor (anuncio de qué claves de CustomPacket soporta). Esto es una
-    ///     carrera contra el sync de estado normal de Rain Meadow y ocurre sobre
-    ///     todo justo tras el join (que es cuando disparamos el handshake).
-    ///  2) Incluso una vez pasado ese filtro, mandar 15-30 paquetes "Reliable" en
-    ///     ráfaga en el mismo frame, justo cuando la sesión P2P puede seguir
-    ///     estabilizándose, puede perder algún paquete suelto sin que nada lo
-    ///     detecte ni lo reintente.
-    ///
-    /// Solución: cola de salida con throttling (1 paquete cada SEND_INTERVAL
-    /// segundos) + ACK explícito por archivo (RPC de sesión, canal 0, fiable por
-    /// reintento nativo de Rain Meadow) + reintento automático de archivos no
-    /// confirmados + reintento con backoff de la petición inicial si no llega
-    /// NINGÚN archivo en un tiempo razonable (cubre el caso 1).
-    /// </summary>
     public class SkinTransfer : IUseCustomPackets
     {
         public static readonly string PacketKey = "DMS_SkinData";
-        private const int MaxCustomPacketBytes = 32768; // Límite duro de CustomPacket (CustomPacket.cs:42)
+        private const int MaxCustomPacketBytes = 32768;
 
         // --- Throttling de envío ---
-        private const float SendIntervalSeconds = 0.05f;  // ~20 paquetes/seg como máximo
+        private const float SendIntervalSeconds = 0.05f;
         private static float _nextSendAllowedTime = 0f;
 
-        // --- Reintento por archivo (lado emisor) ---
+        // --- Reintento por archivo ---
         private const float FileAckTimeoutSeconds = 4f;
         private const int MaxFileAttempts = 6;
 
-        // --- Reintento de la petición inicial (lado solicitante) ---
+        // --- Reintento de la petición inicial ---
         private const float RequestTimeoutSeconds = 4f;
-        private const int MaxRequestAttempts = 6; // ~24s de reintentos antes de rendirse
+        private const int MaxRequestAttempts = 6;
+        // Re-arm: al agotar los reintentos no se abandona; tras un silencio largo (con jitter) se reintenta.
+        private const float RequestRearmSeconds = 60f;
+        private const float RequestRearmJitter = 20f;
 
         private static SkinTransfer _instance;
 
@@ -57,12 +37,12 @@ namespace DMSxMeadow
             {
                 _instance = new SkinTransfer();
                 CustomManager.Subscribe(PacketKey, _instance);
-                Plugin.Logger.LogInfo($"[DMSxMeadow] SkinTransfer suscrito con éxito a la clave de paquetes '{PacketKey}'.");
+                Plugin.Logger.LogDebug($"[DMSxMeadow] SkinTransfer suscrito con éxito a la clave de paquetes '{PacketKey}'.");
             }
         }
 
         // ===================================================================
-        // SOLICITUD (lado que pide la skin) — con reintento por timeout
+        // SOLICITUD
         // ===================================================================
 
         private class PendingRequest
@@ -72,6 +52,7 @@ namespace DMSxMeadow
             public float LastRequestTime;
             public int Attempts;
             public bool AnyFileReceived;
+            public float RearmInterval;
         }
 
         private static readonly Dictionary<string, PendingRequest> PendingRequests =
@@ -86,7 +67,12 @@ namespace DMSxMeadow
             string key = RequestKey(targetPlayer.GetUniqueID(), skinId);
             if (!PendingRequests.TryGetValue(key, out var pending))
             {
-                pending = new PendingRequest { Target = targetPlayer, SkinId = skinId };
+                pending = new PendingRequest
+                {
+                    Target = targetPlayer,
+                    SkinId = skinId,
+                    RearmInterval = RequestRearmSeconds + UnityEngine.Random.Range(-RequestRearmJitter, RequestRearmJitter)
+                };
                 PendingRequests[key] = pending;
             }
 
@@ -94,13 +80,10 @@ namespace DMSxMeadow
             pending.LastRequestTime = Time.time;
             pending.AnyFileReceived = false;
 
-            Plugin.Logger.LogInfo($"[DMSxMeadow] Solicitando skin '{skinId}' al jugador {targetPlayer.id}... (intento {pending.Attempts}/{MaxRequestAttempts})");
+            Plugin.Logger.LogDebug($"[DMSxMeadow] Solicitando skin '{skinId}' al jugador {targetPlayer.id}... (intento {pending.Attempts}/{MaxRequestAttempts})");
             targetPlayer.InvokeRPC(DMSNetworkTester.SkinSerializer.RPC_RequestSkin, DMSNetworkTester.SkinSerializer.GetPlayerSteamId(OnlineManager.mePlayer), skinId);
         }
 
-        /// <summary>Se llama cada Update. Reintenta peticiones que no han recibido NINGÚN
-        /// archivo tras RequestTimeoutSeconds — cubre el caso en que el envío completo se
-        /// perdió en el emisor por la carrera de CustomClientSettings.</summary>
         public static void RetryPendingRequests()
         {
             if (PendingRequests.Count == 0) return;
@@ -117,9 +100,12 @@ namespace DMSxMeadow
 
                 if (pending.Attempts >= MaxRequestAttempts)
                 {
-                    Plugin.Logger.LogError($"[DMSxMeadow] ❌ Se agotaron los reintentos pidiendo '{pending.SkinId}' a {pending.Target?.id}. Abandonando.");
-                    toRemove.Add(kvp.Key);
-                    continue;
+                    if (pending.Target == null) { toRemove.Add(kvp.Key); continue; }
+                    if (Time.time - pending.LastRequestTime < pending.RearmInterval) continue;
+
+                    pending.Attempts = 0;
+                    pending.RearmInterval = RequestRearmSeconds + UnityEngine.Random.Range(-RequestRearmJitter, RequestRearmJitter);
+                    Plugin.Logger.LogDebug($"[DMSxMeadow] 🔄 Re-arm: reintentando '{pending.SkinId}' hacia {pending.Target?.id} (se había agotado el límite de reintentos).");
                 }
 
                 toRetry.Add(pending);
@@ -130,7 +116,7 @@ namespace DMSxMeadow
             foreach (var pending in toRetry)
             {
                 if (pending.Target == null) continue;
-                RequestSkinFromPlayer(pending.Target, pending.SkinId); // re-encola con Attempts++
+                RequestSkinFromPlayer(pending.Target, pending.SkinId);
             }
         }
 
@@ -144,7 +130,7 @@ namespace DMSxMeadow
         }
 
         // ===================================================================
-        // ENVÍO (lado que tiene la skin) — cola throttled + ACK + reintento
+        // ENVÍO
         // ===================================================================
 
         private class OutgoingFile
@@ -161,12 +147,13 @@ namespace DMSxMeadow
 
         private static readonly Queue<OutgoingFile> OutgoingQueue = new Queue<OutgoingFile>();
 
-        // clave = "{targetUniqueId}_{skinId}_{fileIndex}"
         private static readonly Dictionary<string, OutgoingFile> InFlightFiles =
             new Dictionary<string, OutgoingFile>(StringComparer.Ordinal);
 
-        // clave = "{targetUniqueId}_{skinId}" -> archivos que faltan por confirmar o mandar
         private static readonly Dictionary<string, int> TransfersRemaining =
+            new Dictionary<string, int>(StringComparer.Ordinal);
+
+        private static readonly Dictionary<string, int> DroppedFiles =
             new Dictionary<string, int>(StringComparer.Ordinal);
 
         private static string FileKey(string targetUniqueId, string skinId, int fileIndex) =>
@@ -179,7 +166,7 @@ namespace DMSxMeadow
             string transferKey = RequestKey(requester.GetUniqueID(), skinId);
             if (TransfersRemaining.ContainsKey(transferKey))
             {
-                Plugin.Logger.LogInfo($"[DMSxMeadow] Ya hay una transferencia de '{skinId}' en curso hacia {requester.id}; se ignora la petición duplicada (probablemente un reintento del solicitante).");
+                Plugin.Logger.LogDebug($"[DMSxMeadow] Ya hay una transferencia de '{skinId}' en curso hacia {requester.id}; se ignora la petición duplicada (probablemente un reintento del solicitante).");
                 return;
             }
 
@@ -200,7 +187,7 @@ namespace DMSxMeadow
             int total = sendable.Count;
             if (total == 0) return;
 
-            Plugin.Logger.LogInfo($"[DMSxMeadow] Encolando {total} archivos de la skin '{skinId}' hacia {requester.id} (envío throttled con ACK)...");
+            Plugin.Logger.LogDebug($"[DMSxMeadow] Encolando {total} archivos de la skin '{skinId}' hacia {requester.id} (envío throttled con ACK)...");
 
             TransfersRemaining[transferKey] = total;
 
@@ -238,9 +225,6 @@ namespace DMSxMeadow
             }
         }
 
-        /// <summary>Se llama cada Update (RainWorld_Update). Manda como mucho 1 paquete por
-        /// tick, respetando SendIntervalSeconds: primero archivos nunca enviados, luego
-        /// reintentos de archivos cuyo ACK no llegó a tiempo.</summary>
         public static void UpdatePendingTransfers()
         {
             if (Time.time < _nextSendAllowedTime) return;
@@ -252,7 +236,6 @@ namespace DMSxMeadow
                 return;
             }
 
-            // Sin nada nuevo que mandar: revisamos si algún archivo en vuelo se pasó del timeout.
             OutgoingFile toRetry = null;
             foreach (var kvp in InFlightFiles)
             {
@@ -261,7 +244,7 @@ namespace DMSxMeadow
 
                 if (f.Attempts >= MaxFileAttempts)
                 {
-                    continue; // se limpia más abajo
+                    continue;
                 }
 
                 toRetry = f;
@@ -270,16 +253,17 @@ namespace DMSxMeadow
 
             if (toRetry != null)
             {
-                Plugin.Logger.LogWarning($"[DMSxMeadow] ⏱️ Sin ACK para '{toRetry.FileName}' ({toRetry.SkinId}) hacia {toRetry.Target?.id}. Reintentando (intento {toRetry.Attempts + 1}/{MaxFileAttempts})...");
+                Plugin.Logger.LogDebug($"[DMSxMeadow] ⏱️ Sin ACK para '{toRetry.FileName}' ({toRetry.SkinId}) hacia {toRetry.Target?.id}. Reintentando (intento {toRetry.Attempts + 1}/{MaxFileAttempts})...");
                 SendOneFile(toRetry);
                 return;
             }
 
-            // Limpieza: descartamos entradas que agotaron reintentos para no revisarlas cada frame.
             var exhausted = InFlightFiles.Where(kvp => kvp.Value.Attempts >= MaxFileAttempts).ToList();
             foreach (var kvp in exhausted)
             {
-                Plugin.Logger.LogError($"[DMSxMeadow] ❌ '{kvp.Value.FileName}' de la skin '{kvp.Value.SkinId}' hacia {kvp.Value.Target?.id} no se pudo confirmar tras {kvp.Value.Attempts} intentos. Se abandona ese archivo.");
+                Plugin.Logger.LogDebug($"[DMSxMeadow] ❌ '{kvp.Value.FileName}' de la skin '{kvp.Value.SkinId}' hacia {kvp.Value.Target?.id} no se pudo confirmar tras {kvp.Value.Attempts} intentos. Se abandona ese archivo (el re-arm reintentará la skin).");
+                string droppedKey = RequestKey(kvp.Value.Target.GetUniqueID(), kvp.Value.SkinId);
+                DroppedFiles[droppedKey] = DroppedFiles.TryGetValue(droppedKey, out int drops) ? drops + 1 : 1;
                 CompleteOneFile(kvp.Key, kvp.Value);
             }
         }
@@ -298,7 +282,6 @@ namespace DMSxMeadow
             _nextSendAllowedTime = Time.time + SendIntervalSeconds;
         }
 
-        /// <summary>Llamado cuando llega el RPC_AckSkinFile del receptor.</summary>
         public static void OnFileAcked(OnlinePlayer fromPlayer, string skinId, int fileIndex)
         {
             if (fromPlayer == null) return;
@@ -320,7 +303,15 @@ namespace DMSxMeadow
                 if (remaining <= 0)
                 {
                     TransfersRemaining.Remove(transferKey);
-                    Plugin.Logger.LogInfo($"[DMSxMeadow] ✅ Transferencia de '{file.SkinId}' hacia {file.Target?.id} finalizada (confirmada o agotada archivo por archivo).");
+                    if (DroppedFiles.TryGetValue(transferKey, out int drops))
+                    {
+                        DroppedFiles.Remove(transferKey);
+                        Plugin.Logger.LogDebug($"[DMSxMeadow] 🚨 Transferencia de '{file.SkinId}' hacia {file.Target?.id} INCOMPLETA: {drops} archivo(s) abandonados tras agotar reintentos. El receptor no podrá recomponer la skin (RNF-3: queda con la piel por defecto hasta un re-arm).");
+                    }
+                    else
+                    {
+                        Plugin.Logger.LogDebug($"[DMSxMeadow] ✅ Transferencia de '{file.SkinId}' hacia {file.Target?.id} finalizada (todos los archivos confirmados).");
+                    }
                 }
                 else
                 {
@@ -349,20 +340,27 @@ namespace DMSxMeadow
                     int dataLength = reader.ReadInt32();
                     byte[] fileBytes = reader.ReadBytes(dataLength);
 
-                    // H-3: validación anti path traversal. Nada de estos nombres llega a
-                    // Path.Combine(CacheSkinsPath, ...) sin pasar por aquí. No se manda ACK:
-                    // el emisor reintentará y acabará abandonando el archivo.
                     if (!SkinRegistration.IsValidSkinIdentifier(skinId) || !SkinRegistration.IsValidSkinIdentifier(fileName))
                     {
                         Plugin.Logger.LogWarning($"[DMSxMeadow] ⛔ CustomPacket de skin de {fromPlayer?.id} RECHAZADO: skinId='{skinId}' fileName='{fileName}' no cumplen ^[a-zA-Z0-9_.-]+$.");
                         return;
                     }
 
+                    string bannedIdentity = DMSNetworkTester.SkinSerializer.GetPlayerSteamId(fromPlayer);
+                    if (SkinBanManager.IsBanned(bannedIdentity))
+                    {
+                        Plugin.Logger.LogDebug($"[DMSxMeadow] ⛔ CustomPacket de skin de {fromPlayer?.id} DESCARTADO: jugador baneado localmente.");
+                        return;
+                    }
+
+                    if (!DMSNetworkTester.SkinSerializer.IsSteamFriendAllowed(bannedIdentity))
+                    {
+                        Plugin.Logger.LogDebug($"[DMSxMeadow] ⛔ CustomPacket de skin de {fromPlayer?.id} DESCARTADO: 'solo amigos' ON y el emisor no es amigo de Steam.");
+                        return;
+                    }
+
                     OnChunkReceived(fromPlayer, skinId, fileName, fileBytes, fileIndex, totalFiles);
 
-                    // ACK inmediato: RPC de sesión (canal 0), fiable por el reintento nativo
-                    // de Rain Meadow — no depende del filtro de CustomClientSettings porque
-                    // los RPC de sesión no pasan por ese chequeo.
                     fromPlayer.InvokeRPC(DMSNetworkTester.SkinSerializer.RPC_AckSkinFile, DMSNetworkTester.SkinSerializer.GetPlayerSteamId(OnlineManager.mePlayer), skinId, fileIndex);
                 }
             }
@@ -373,6 +371,16 @@ namespace DMSxMeadow
         }
 
         private static readonly Dictionary<string, Dictionary<string, byte[]>> IncomingTransfers = new Dictionary<string, Dictionary<string, byte[]>>();
+
+        private static readonly HashSet<string> AbortedIncomingTransfers = new HashSet<string>(StringComparer.Ordinal);
+
+        private static void AbortIncomingTransfer(string transferKey)
+        {
+            IncomingTransfers.Remove(transferKey);
+            AbortedIncomingTransfers.Add(transferKey);
+            SkinPartGuard.ForgetTransfer(transferKey);
+            Plugin.Logger.LogWarning($"[DMSxMeadow] ⛔ Transferencia {transferKey} ABORTADA (rechazo 3a estricto): la skin no se registra y el jugador queda con la skin por defecto.");
+        }
 
         public static void ForgetPlayer(OnlinePlayer player)
         {
@@ -391,20 +399,25 @@ namespace DMSxMeadow
 
             if (incompleteKeys.Count > 0)
             {
-                Plugin.Logger.LogInfo($"[DMSxMeadow] 🧹 Descartadas {incompleteKeys.Count} transferencia(s) entrante(s) incompleta(s) de {player.id} (jugador salió).");
+                Plugin.Logger.LogDebug($"[DMSxMeadow] 🧹 Descartadas {incompleteKeys.Count} transferencia(s) entrante(s) incompleta(s) de {player.id} (jugador salió).");
             }
 
-            // Limpieza del lado emisor: dejamos de mandarle/reintentarle archivos a quien se fue.
+            var abortedKeys = AbortedIncomingTransfers.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList();
+            foreach (var key in abortedKeys) AbortedIncomingTransfers.Remove(key);
+            SkinPartGuard.ForgetPlayer(player.GetUniqueID());
+
             var outgoingToDrop = InFlightFiles.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList();
             foreach (var key in outgoingToDrop) InFlightFiles.Remove(key);
 
             var transfersToDrop = TransfersRemaining.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList();
             foreach (var key in transfersToDrop) TransfersRemaining.Remove(key);
 
+            var dropsToDrop = DroppedFiles.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList();
+            foreach (var key in dropsToDrop) DroppedFiles.Remove(key);
+
             var requestsToDrop = PendingRequests.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList();
             foreach (var key in requestsToDrop) PendingRequests.Remove(key);
 
-            // La cola de salida es más barata de filtrar reconstruyéndola.
             if (OutgoingQueue.Count > 0)
             {
                 var kept = OutgoingQueue.Where(f => f.Target != player).ToList();
@@ -413,18 +426,55 @@ namespace DMSxMeadow
             }
         }
 
-        /// <summary>Purga total al terminar la sesión (host se fue / LeaveLobby):
-        /// peticiones pendientes, cola throttleada de envío, archivos en vuelo,
-        /// ACK sin confirmar y recepciones incompletas.</summary>
+        public static void ForgetSenderState(OnlinePlayer player)
+        {
+            if (player == null) return;
+            string uid = player.GetUniqueID();
+            string prefix = $"{uid}_";
+
+            var requestsToDrop = PendingRequests.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList();
+            foreach (var key in requestsToDrop) PendingRequests.Remove(key);
+
+            var incomingToDrop = IncomingTransfers.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList();
+            foreach (var key in incomingToDrop) IncomingTransfers.Remove(key);
+
+            var abortedToDrop = AbortedIncomingTransfers.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList();
+            foreach (var key in abortedToDrop) AbortedIncomingTransfers.Remove(key);
+
+            SkinPartGuard.ForgetPlayer(uid);
+
+            int dropped = requestsToDrop.Count + incomingToDrop.Count + abortedToDrop.Count;
+            if (dropped > 0)
+            {
+                Plugin.Logger.LogDebug($"[DMSxMeadow] 🧹 Estado entrante de {player.id} purgado ({dropped} elementos): handshake nuevo, el slugcat anterior quedó obsoleto.");
+            }
+        }
+
+        public static void AbortAllOutgoing()
+        {
+            int dropped = OutgoingQueue.Count + InFlightFiles.Count + TransfersRemaining.Count;
+            OutgoingQueue.Clear();
+            InFlightFiles.Clear();
+            TransfersRemaining.Clear();
+            DroppedFiles.Clear();
+            if (dropped > 0)
+            {
+                Plugin.Logger.LogDebug($"[DMSxMeadow] 🧹 Envíos en curso abortados ({dropped} elementos) por cambio de slugcat local: la skin vieja quedó obsoleta.");
+            }
+        }
+
         public static void ClearAllTransfers()
         {
             PendingRequests.Clear();
             OutgoingQueue.Clear();
             InFlightFiles.Clear();
             TransfersRemaining.Clear();
+            DroppedFiles.Clear();
             IncomingTransfers.Clear();
+            AbortedIncomingTransfers.Clear();
+            SkinPartGuard.ClearAll();
             _nextSendAllowedTime = 0f;
-            Plugin.Logger.LogInfo("[DMSxMeadow] 🧹 Transferencias pendientes y recepciones incompletas purgadas (sesión terminada).");
+            Plugin.Logger.LogDebug("[DMSxMeadow] 🧹 Transferencias pendientes y recepciones incompletas purgadas (sesión terminada).");
         }
 
         private static void OnChunkReceived(OnlinePlayer sender, string skinId, string fileName, byte[] fileBytes, int fileIndex, int totalFiles)
@@ -433,27 +483,41 @@ namespace DMSxMeadow
 
             string transferKey = $"{sender.GetUniqueID()}_{skinId}";
 
+            if (AbortedIncomingTransfers.Contains(transferKey))
+            {
+                Plugin.Logger.LogDebug($"[DMSxMeadow] Archivo [{fileIndex + 1}/{totalFiles}] '{fileName}' de la transferencia rechazada {transferKey} ignorado (3a estricto).");
+                return;
+            }
+
             if (!IncomingTransfers.ContainsKey(transferKey))
             {
                 IncomingTransfers[transferKey] = new Dictionary<string, byte[]>();
             }
 
             IncomingTransfers[transferKey][fileName] = fileBytes;
-            Plugin.Logger.LogInfo($"[DMSxMeadow] Archivo [{fileIndex + 1}/{totalFiles}] '{fileName}' recibido para skin '{skinId}' desde {sender.id}.");
+            Plugin.Logger.LogDebug($"[DMSxMeadow] Archivo [{fileIndex + 1}/{totalFiles}] '{fileName}' recibido para skin '{skinId}' desde {sender.id}.");
+
+            if (!SkinPartGuard.ValidateIncomingFile(transferKey, fileName, IncomingTransfers[transferKey]))
+            {
+                AbortIncomingTransfer(transferKey);
+                return;
+            }
 
             if (IncomingTransfers[transferKey].Count >= totalFiles)
             {
-                Plugin.Logger.LogInfo($"[DMSxMeadow] 📦 Skin completa '{skinId}' recibida de {sender.id}. Registrando en caché...");
+                Plugin.Logger.LogDebug($"[DMSxMeadow] 📦 Skin completa '{skinId}' recibida de {sender.id}. Registrando en caché...");
                 var completeSkinFiles = IncomingTransfers[transferKey];
+
+                if (!SkinPartGuard.ValidateDeferredAtCompletion(transferKey, completeSkinFiles))
+                {
+                    AbortIncomingTransfer(transferKey);
+                    return;
+                }
+
                 IncomingTransfers.Remove(transferKey);
                 string senderSteamId = DMSNetworkTester.SkinSerializer.GetPlayerSteamId(sender);
-                SkinRegistration.SaveAndRegisterCacheSkin(senderSteamId, skinId, completeSkinFiles);
+                SkinRegistration.RegisterReceivedSkin(senderSteamId, skinId, completeSkinFiles);
 
-                // La recreación del slug queda cubierta dentro de SaveAndRegisterCacheSkin:
-                // si hubo ReloadAtlases() (primera escritura en disco) se recrean TODOS los
-                // slugs (ScheduleRecreateAllSlugs, evita sprites inválidos → invisibilidad);
-                // si la skin ya existía no hubo reload y no hay nada que recrear. La
-                // recreación por id aquí sería redundante, por eso no se repite.
             }
         }
     }

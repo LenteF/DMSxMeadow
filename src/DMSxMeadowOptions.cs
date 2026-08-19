@@ -19,6 +19,12 @@ namespace DMSxMeadow
         private bool _searchBySteamId = true;
         private List<ProfileRow> _currentRows = new List<ProfileRow>();
 
+        private OpScrollBox _bannedScrollBox;
+        private OpTextBox _bannedSearchBox;
+        private OpSimpleButton _bannedModeButton;
+        private bool _searchBannedBySteamId = true;
+        private List<BannedRow> _bannedRows = new List<BannedRow>();
+
         private const string ONLINE_TAB_NAME = "Online";
         private const string LOCAL_TAB_NAME = "Local";
 
@@ -26,34 +32,23 @@ namespace DMSxMeadow
         private OpTab _profilesTab;
 
         private Configurable<string> _searchConfig;
+        private Configurable<string> _bannedSearchConfig;
 
         // ============================================================
-        // FLAG DE CONSENTIMIENTO (RF-7 / Capa 0) — default OFF
+        // FLAG DE CONSENTIMIENTO
         // ============================================================
         private static Configurable<bool> _shareSkinConfig;
 
-        /// <summary>Estado global en memoria del flag de compartir. Se carga UNA vez al
-        /// arranque desde el archivo ModConfigs/dmsxmeadow.txt y se actualiza en vivo cuando
-        /// el usuario togglea el checkbox del OI (cuyo valor es el que Remix persistirá al
-        /// cerrar el menú). Así no hay I/O de disco por petición y no existe la ventana de
-        /// arranque donde el bind de Remix devolvía el default.</summary>
-        private static bool _shareSkinMemory;
-        private static bool _shareSkinMemoryInitialized;
+        // ============================================================
+        // GATE "SOLO AMIGOS"
+        // ============================================================
+        private static Configurable<bool> _friendsOnlyConfig;
 
-        public static bool ShareSkinEnabled
-        {
-            get
-            {
-                if (!_shareSkinMemoryInitialized)
-                {
-                    _shareSkinMemory = ReadShareSkinFromFile();
-                    _shareSkinMemoryInitialized = true;
-                }
-                return _shareSkinMemory;
-            }
-        }
+        public static bool ShareSkinEnabled => ReadBoolFromConfigFile("shareSkin");
 
-        private static bool ReadShareSkinFromFile()
+        public static bool FriendsOnlyEnabled => ReadBoolFromConfigFile("friendsOnly");
+
+        private static bool ReadBoolFromConfigFile(string key)
         {
             try
             {
@@ -63,7 +58,7 @@ namespace DMSxMeadow
                 foreach (string rawLine in File.ReadAllLines(path))
                 {
                     string line = rawLine.Trim();
-                    if (line.StartsWith("shareSkin", StringComparison.OrdinalIgnoreCase) && line.Contains("="))
+                    if (line.StartsWith(key, StringComparison.OrdinalIgnoreCase) && line.Contains("="))
                     {
                         string value = line.Substring(line.IndexOf('=') + 1).Trim();
                         if (bool.TryParse(value, out bool parsed))
@@ -75,35 +70,32 @@ namespace DMSxMeadow
             }
             catch (Exception ex)
             {
-                Plugin.Logger.LogError($"[DMSxMeadow] Error leyendo el flag de compartir del archivo de config: {ex.Message}");
+                string what = key == "shareSkin" ? "de compartir" : "'solo amigos'";
+                Plugin.Logger.LogError($"[DMSxMeadow] Error leyendo el flag {what} del archivo de config: {ex.Message}");
             }
             return false;
         }
 
-        /// <summary>
-        /// Bindeo temprano del flag para el checkbox del OI (defensa en profundidad). El
-        /// valor QUE MANDÁ en el comportamiento es siempre el del archivo en disco
-        /// (ShareSkinEnabled); el bind solo informa al checkbox, que Remix persiste al
-        /// cerrar el menú. Se llama desde OnModsInit.
-        /// </summary>
         public void EnsureConfigBound()
         {
             try
             {
                 if (_shareSkinConfig == null && this.config != null)
                 {
-                    _shareSkinConfig = this.config.Bind<bool>("shareSkin", false, new ConfigurableInfo(
+                    _shareSkinConfig = this.config.Bind<bool>("shareSkin", ReadBoolFromConfigFile("shareSkin"), new ConfigurableInfo(
                         "Allow other players to request the skins you have equipped. OFF by default: your skins never leave your machine."));
                 }
 
-                // Carga inicial del estado en memoria desde el archivo (una sola vez).
-                if (!_shareSkinMemoryInitialized)
+                if (_friendsOnlyConfig == null && this.config != null)
                 {
-                    _shareSkinMemory = ReadShareSkinFromFile();
-                    _shareSkinMemoryInitialized = true;
+                    _friendsOnlyConfig = this.config.Bind<bool>("friendsOnly", ReadBoolFromConfigFile("friendsOnly"), new ConfigurableInfo(
+                        "Only download skins from players on your Steam friends list. ON: others (host or client) are never downloaded and appear with the default skin."));
                 }
 
-                Plugin.Logger.LogInfo($"[DMSxMeadow] Flag de compartir skin (fuente: ModConfigs/dmsxmeadow.txt): {_shareSkinMemory}");
+                _shareSkinConfig.Value = ShareSkinEnabled;
+                _friendsOnlyConfig.Value = FriendsOnlyEnabled;
+
+                Plugin.Logger.LogDebug($"[DMSxMeadow] Flags (fuente: ModConfigs/dmsxmeadow.txt): ShareSkin={ShareSkinEnabled}, SoloAmigos={FriendsOnlyEnabled}");
             }
             catch (Exception ex)
             {
@@ -111,8 +103,27 @@ namespace DMSxMeadow
             }
         }
 
+        private static void WriteBoolToConfigFile(string key, bool value)
+        {
+            try
+            {
+                string path = Path.Combine(Application.persistentDataPath, "ModConfigs", "dmsxmeadow.txt");
+                var lines = File.Exists(path) ? File.ReadAllLines(path).ToList() : new List<string>();
+                string newLine = key + " = " + value.ToString().ToLowerInvariant();
+                int keyIndex = lines.FindIndex(l => l.TrimStart().StartsWith(key, StringComparison.OrdinalIgnoreCase) && l.Contains("="));
+                if (keyIndex >= 0) lines[keyIndex] = newLine;
+                else lines.Add(newLine);
+                File.WriteAllLines(path, lines, new System.Text.UTF8Encoding(false));
+            }
+            catch (Exception ex)
+            {
+                string what = key == "shareSkin" ? "de compartir" : "'solo amigos'";
+                Plugin.Logger.LogError($"[DMSxMeadow] Error escribiendo el flag {what} al archivo de config: {ex.Message}");
+            }
+        }
+
         // ============================================================
-        // CACHE PARA EL MÉTODO Unload (Reflection)
+        // CACHE PARA UNLOAD
         // ============================================================
         private static MethodInfo _unloadMethod;
 
@@ -124,58 +135,168 @@ namespace DMSxMeadow
             public OpSimpleButton DeleteButton;
         }
 
+        private class BannedRow
+        {
+            public string BannedId;
+            public string BannedName;
+            public OpLabel Label;
+            public OpSimpleButton DeleteButton;
+        }
+
         public override void Initialize()
         {
             base.Initialize();
 
             // ============================================================
-            // TABS: "Online" (first, shown by default) and "Local"
+            // TABS: "Online" and "Local"
             // ============================================================
             _onlineTab = new OpTab(this, ONLINE_TAB_NAME);
             _profilesTab = new OpTab(this, LOCAL_TAB_NAME);
             Tabs = new[] { _onlineTab, _profilesTab };
 
-            // Shared layout anchors for both tabs (visual consistency)
             float row1Y = 515f;
             float searchRowOffsetX = -21f;
             float titleY = row1Y + 55f;
 
             if (_shareSkinConfig == null)
             {
-                _shareSkinConfig = this.config.Bind<bool>("shareSkin", false, new ConfigurableInfo(
+                _shareSkinConfig = this.config.Bind<bool>("shareSkin", ReadBoolFromConfigFile("shareSkin"), new ConfigurableInfo(
                     "Allow other players to request the skins you have equipped. OFF by default: your skins never leave your machine."));
             }
+
+            if (_friendsOnlyConfig == null)
+            {
+                _friendsOnlyConfig = this.config.Bind<bool>("friendsOnly", ReadBoolFromConfigFile("friendsOnly"), new ConfigurableInfo(
+                    "Only download skins from players on your Steam friends list. ON: others (host or client) are never downloaded and appear with the default skin."));
+            }
+
+            _shareSkinConfig.Value = ShareSkinEnabled;
+            _friendsOnlyConfig.Value = FriendsOnlyEnabled;
+
             var onlineTitle = new OpLabel(
-                new Vector2(300f, titleY),
-                new Vector2(),
+                new Vector2(20f + searchRowOffsetX + 124f, titleY),
+                new Vector2(350f, 20f),
                 "ONLINE OPTIONS",
                 FLabelAlignment.Center,
                 false
             );
             _onlineTab.AddItems(onlineTitle);
 
-            var shareCheckbox = new OpCheckBox(_shareSkinConfig, new Vector2(20f, 440f));
-            // El checkbox togglea en vivo el estado en memoria: ese valor es exactamente el
-            // que Remix persistirá al archivo al cerrar el menú, así que no hace falta
-            // releer el disco (que aún tendría el valor viejo hasta el guardado).
+            var shareCheckbox = new OpCheckBox(_shareSkinConfig, new Vector2(20f, 515f));
             shareCheckbox.OnValueChanged += (_, _, newValue) =>
             {
                 if (bool.TryParse(newValue, out bool parsed))
                 {
-                    _shareSkinMemory = parsed;
+                    bool changed = parsed != ShareSkinEnabled;
+                    WriteBoolToConfigFile("shareSkin", parsed);
+                    Plugin.Logger.LogDebug($"[DMSxMeadow] Checkbox de compartir: {(parsed ? "ON" : "OFF")} — escrito al archivo al instante{(changed ? ", re-emitiendo handshake." : " (sin cambio real).")}");
+                    if (changed)
+                    {
+                        Plugin.RequestHandshakeReemit();
+                    }
                 }
             };
             _onlineTab.AddItems(shareCheckbox);
 
             var shareDescription = new OpLabel(
-                new Vector2(52f, 415f),
+                new Vector2(52f, 490f),
                 new Vector2(520f, 60f),
-                "Allow other players to see your skin",
+                "Share Your Skin",
                 FLabelAlignment.Left,
                 false
             );
             shareDescription.color = new Color(0.65f, 0.65f, 0.65f);
             _onlineTab.AddItems(shareDescription);
+
+            // ============================================================
+            // GATE "SOLO AMIGOS"
+            // ============================================================
+            var friendsOnlyCheckbox = new OpCheckBox(_friendsOnlyConfig, new Vector2(300f, 515f));
+            friendsOnlyCheckbox.OnValueChanged += (_, _, newValue) =>
+            {
+                if (bool.TryParse(newValue, out bool parsed))
+                {
+                    bool changed = parsed != FriendsOnlyEnabled;
+                    WriteBoolToConfigFile("friendsOnly", parsed);
+                    Plugin.Logger.LogDebug($"[DMSxMeadow] Checkbox 'solo amigos': {(parsed ? "ON" : "OFF")} — escrito al archivo al instante.");
+                    if (changed && parsed)
+                    {
+                        DMSNetworkTester.SkinSerializer.ForgetAllPlayers();
+                        SkinTransfer.ClearAllTransfers();
+                        Plugin.ScheduleRecreateAllSlugs();
+                        Plugin.Logger.LogDebug("[DMSxMeadow] 🤝 'Solo amigos' activado: skins de no-amigos purgadas y slugs de la sala recreados a default.");
+                    }
+                }
+            };
+            _onlineTab.AddItems(friendsOnlyCheckbox);
+
+            var friendsOnlyDescription = new OpLabel(
+                new Vector2(332f, 490f),
+                new Vector2(300f, 60f),
+                "Only Steam Friends Skins",
+                FLabelAlignment.Left,
+                false
+            );
+            friendsOnlyDescription.color = new Color(0.65f, 0.65f, 0.65f);
+            _onlineTab.AddItems(friendsOnlyDescription);
+
+            // ============================================================
+            // ONLINE TAB — BANNED PLAYERS MANAGEMENT
+            // ============================================================
+            if (_bannedSearchConfig == null)
+            {
+                _bannedSearchConfig = this.config.Bind<string>("bannedSearchQuery", "", new ConfigurableInfo("Search banned players"));
+            }
+
+            float bannedTitleY = 480f;
+            float bannedRow1Y = 440f;
+
+            var bannedTitle = new OpLabel(
+                new Vector2(20f + searchRowOffsetX + 124f, bannedTitleY),
+                new Vector2(350f, 20f),
+                "BANNED SKIN LIST",
+                FLabelAlignment.Center,
+                false
+            );
+            _onlineTab.AddItems(bannedTitle);
+
+            _bannedSearchBox = new OpTextBox(_bannedSearchConfig, new Vector2(20f + searchRowOffsetX, bannedRow1Y), 200f);
+            _bannedSearchBox.OnValueChanged += (sender, oldV, newV) => RefreshBannedList();
+            _onlineTab.AddItems(_bannedSearchBox);
+
+            _bannedModeButton = new OpSimpleButton(
+                new Vector2(230f + searchRowOffsetX, bannedRow1Y),
+                new Vector2(140f, 24f),
+                _searchBannedBySteamId ? "Player ID" : "Name"
+            );
+            _bannedModeButton.OnClick += (_) =>
+            {
+                _searchBannedBySteamId = !_searchBannedBySteamId;
+                _bannedModeButton.text = _searchBannedBySteamId ? "Player ID" : "Name";
+                RefreshBannedList();
+            };
+            _onlineTab.AddItems(_bannedModeButton);
+
+            float bannedScrollY = 30f;
+            float bannedScrollHeight = 385f;
+            float bannedContentHeight = 100f;
+
+            _bannedScrollBox = new OpScrollBox(
+                new Vector2(0f, bannedScrollY),
+                new Vector2(600f, bannedScrollHeight),
+                bannedContentHeight,
+                false,
+                true,
+                true
+            )
+            {
+                colorEdge = MenuColorEffect.rgbMediumGrey,
+                colorFill = MenuColorEffect.rgbBlack,
+                fillAlpha = 0.3f
+            };
+            _onlineTab.AddItems(_bannedScrollBox);
+
+            RefreshBannedList();
 
             // ============================================================
             // LOCAL TAB — LOCAL PROFILE MANAGEMENT
@@ -185,7 +306,6 @@ namespace DMSxMeadow
                 _searchConfig = this.config.Bind<string>("searchQuery", "", new ConfigurableInfo("Search query"));
             }
 
-            // SECTION TITLE
             var titleLabel = new OpLabel(
                 new Vector2(20f + searchRowOffsetX + 124f, titleY),
                 new Vector2(350f, 20f),
@@ -195,7 +315,6 @@ namespace DMSxMeadow
             );
             _profilesTab.AddItems(titleLabel);
 
-            // TOP ROW: SEARCH FIELD + MODE
             _searchBox = new OpTextBox(_searchConfig, new Vector2(20f + searchRowOffsetX, row1Y), 200f);
             _searchBox.OnValueChanged += (sender, oldV, newV) => RefreshList();
             _profilesTab.AddItems(_searchBox);
@@ -213,7 +332,6 @@ namespace DMSxMeadow
             };
             _profilesTab.AddItems(_modeButton);
 
-            // SCROLL BOX DE PERFILES
             float scrollY = 30f;
             float scrollHeight = 460f;
             float contentHeight = 100f;
@@ -239,13 +357,12 @@ namespace DMSxMeadow
                     BindingFlags.NonPublic | BindingFlags.Instance);
             }
 
-            // LIMPIEZA AUTOMÁTICA DE HUÉRFANOS
             MeadowProfileManager.DeleteOrphanProfiles();
             RefreshList();
         }
 
         // ============================================================
-        // HELPER: UNLOAD ELEMENT (elimina gráficos de pantalla)
+        // HELPER: UNLOAD ELEMENT
         // ============================================================
         private void UnloadElement(UIelement element)
         {
@@ -375,6 +492,104 @@ namespace DMSxMeadow
             catch (Exception ex)
             {
                 Plugin.Logger.LogError($"Error deleting profile {profileNumber}: {ex.Message}");
+            }
+        }
+
+        // ============================================================
+        // LISTA DE BANEADOS
+        // ============================================================
+        private void RefreshBannedList()
+        {
+            try
+            {
+                foreach (var row in _bannedRows)
+                {
+                    OpScrollBox.RemoveItemsFromScrollBox(row.Label, row.DeleteButton);
+                    UnloadElement(row.Label);
+                    UnloadElement(row.DeleteButton);
+                }
+                _bannedRows.Clear();
+
+                var allBanned = SkinBanManager.GetAllBanned();
+
+                string query = _bannedSearchBox.value?.Trim() ?? "";
+                bool hasQuery = !string.IsNullOrEmpty(query);
+
+                const float ROW_HEIGHT = 26f;
+                const float VISIBLE_HEIGHT = 385f;
+
+                var matching = new List<(string name, string id)>();
+                foreach (var (name, id) in allBanned)
+                {
+                    bool matches = !hasQuery || (_searchBannedBySteamId
+                        ? id.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0
+                        : name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0);
+
+                    if (matches) matching.Add((name, id));
+                }
+
+                matching = matching
+                    .OrderBy(x => string.IsNullOrEmpty(x.name))
+                    .ThenBy(x => x.name, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(x => x.id, StringComparer.Ordinal)
+                    .ToList();
+
+                float contentHeight = Math.Max(matching.Count * ROW_HEIGHT + 20f, VISIBLE_HEIGHT);
+
+                float y = contentHeight - ROW_HEIGHT - 10f;
+
+                foreach (var (name, id) in matching)
+                {
+                    string display = string.IsNullOrEmpty(name) ? id : $"{name}    {id}";
+
+                    var label = new OpLabel(10f, y, display, false);
+
+                    var deleteBtn = new OpSimpleButton(
+                        new Vector2(350f, y - 3f),
+                        new Vector2(70f, 22f),
+                        "Delete"
+                    );
+
+                    string capturedId = id;
+                    deleteBtn.OnClick += (_) => DeleteBanned(capturedId);
+
+                    _bannedScrollBox.AddItems(label, deleteBtn);
+                    _bannedRows.Add(new BannedRow
+                    {
+                        BannedId = id,
+                        BannedName = name,
+                        Label = label,
+                        DeleteButton = deleteBtn
+                    });
+
+                    y -= ROW_HEIGHT;
+                }
+
+                _bannedScrollBox.SetContentSize(contentHeight, true);
+                _bannedScrollBox.MarkDirty();
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.LogError($"Error refreshing banned list: {ex.Message}");
+                Plugin.Logger.LogError(ex.StackTrace);
+            }
+        }
+
+        private void DeleteBanned(string identity)
+        {
+            try
+            {
+                bool removed = SkinBanManager.RemoveBan(identity);
+                if (removed)
+                {
+                    Plugin.Logger.LogInfo($"[DMSxMeadow] 🚫 {identity} quitada de la lista negra (desbaneado). Solicitando re-handshake...");
+                    DMSNetworkTester.SkinSerializer.RequestHandshakeFrom(identity);
+                }
+                RefreshBannedList();
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.LogError($"Error removing ban {identity}: {ex.Message}");
             }
         }
     }

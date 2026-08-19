@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace DMSxMeadow
 {
-    [BepInPlugin("dmsxmeadow", "DMS x Meadow", "2.0.0")]
+    [BepInPlugin("dmsxmeadow", "DMS x Meadow", "1.4.0")]
     [BepInDependency("dressmyslugcat", BepInDependency.DependencyFlags.HardDependency)]
     [BepInDependency("henpemaz.rainmeadow", BepInDependency.DependencyFlags.HardDependency)]
     public class Plugin : BaseUnityPlugin
@@ -34,6 +34,7 @@ namespace DMSxMeadow
             {
                 On.RainWorld.OnModsInit += OnModsInit;
                 On.RainWorld.Update += RainWorld_Update;
+                On.ProcessManager.PostSwitchMainProcess += ProcessManager_PostSwitchMainProcess;
             }
             catch (Exception ex)
             {
@@ -51,14 +52,20 @@ namespace DMSxMeadow
                 if (isInit) return;
                 isInit = true;
 
+                Plugin.Logger.LogInfo("[DMSxMeadow] Build 1.4.0 (13/08/2026: sección 'Name' en el selector de colores de historia — color de nombre en chat + luz de tubería independiente del color del cuerpo, sync via currentColors). Si NO ves esta línea, se está cargando un DLL viejo.");
+
                 MachineConnector.SetRegisteredOI("dmsxmeadow", DMSxMeadowOptions.Instance);
                 DMSxMeadowOptions.Instance.EnsureConfigBound();
 
                 MeadowProfileManager.Load();
+                SkinBanManager.Load();
                 SkinTransfer.Initialize();
 
                 InitializeHooks();
                 FancyMenuHookHandler.Initialize();
+                SpectatorPlayerButtonHook.Initialize();
+                StoryLobbyShareSkinIndicator.Initialize();
+                PlayerNameColorHooks.Initialize();
             }
             catch (Exception ex)
             {
@@ -101,11 +108,6 @@ namespace DMSxMeadow
                     handleDisconnectHook = new Hook(disconnectMethod, disconnectHook);
                 }
 
-                // Cierre de la sesión online (LeaveLobby): cuando el HOST abandona el
-                // lobby, los clientes NO reciben HandleDisconnect del host (el lobby se
-                // destruye y RainMeadow cierra la sesión por aquí), así que la limpieza
-                // global de skins recibidas se hace en este punto común (también cubre
-                // salida voluntaria y errores de conexión).
                 MethodInfo leaveLobbyMethod = typeof(OnlineManager).GetMethod("LeaveLobby", BindingFlags.Public | BindingFlags.Static);
                 MethodInfo leaveLobbyHook = typeof(Plugin).GetMethod("OnlineManager_LeaveLobby", BindingFlags.NonPublic | BindingFlags.Static);
                 if (leaveLobbyMethod != null && leaveLobbyHook != null)
@@ -113,15 +115,6 @@ namespace DMSxMeadow
                     this.leaveLobbyHook = new Hook(leaveLobbyMethod, leaveLobbyHook);
                 }
 
-                // DMS nativo no aplica skins a slugs ajenos en sesión Meadow si su opción
-                // "DefaultMeadowSkins" (activa por defecto) está ON: InitiateCustomGraphics
-                // devuelve null antes de construir el PlayerGraphicsData (PlayerGraphicsHooks.cs:518).
-                // Forzamos false en memoria para que DMS procese a los jugadores remotos y
-                // Customization.For efectivamente reciba nuestras skins descargadas — PERO
-                // respetando la opción del usuario: si DefaultMeadowSkins está ON, devolvemos
-                // el resultado original (DMS da skin default a los remotos y nuestro flujo de
-                // skins ajenas queda apagado). (Resolución por reflexión: la DLL de referencia
-                // en lib\ puede ir por detrás de la versión instalada.)
                 try
                 {
                     var dmsAssembly = typeof(DressMySlugcat.Customization).Assembly;
@@ -137,7 +130,7 @@ namespace DMSxMeadow
                         if (meadowCheckMethod != null && meadowCheckHookInfo != null)
                         {
                             meadowCheckHook = new Hook(meadowCheckMethod, meadowCheckHookInfo);
-                            Logger.LogInfo("[DMSxMeadow] DefaultMeadowHook override activado: se permitirá aplicar skins a jugadores remotos (DMS CheckForMeadowNonselfClient => false).");
+                            Logger.LogDebug("[DMSxMeadow] DefaultMeadowHook override activado: se permitirá aplicar skins a jugadores remotos (DMS CheckForMeadowNonselfClient => false).");
                         }
                     }
                 }
@@ -152,11 +145,6 @@ namespace DMSxMeadow
             }
         }
 
-        /// <summary>
-        /// Dispara el handshake automáticamente cuando se crea el leaser de un Player (entrada
-        /// a sala / recreación del slugcat / cambio de slug), sin frame-watching.
-        /// H-6 (RF-1): ya no hay tecla K de debug.
-        /// </summary>
         private static void SpriteLeaser_Ctor_Hook(On.RoomCamera.SpriteLeaser.orig_ctor orig, RoomCamera.SpriteLeaser sLeaser, IDrawable obj, RoomCamera rCam)
         {
             orig(sLeaser, obj, rCam);
@@ -166,11 +154,9 @@ namespace DMSxMeadow
                 if (obj is not PlayerGraphics playerGraphics) return;
                 if (playerGraphics?.player == null) return;
 
-                // Solo el jugador local de esta máquina emite su propio handshake (RF-7).
                 var onlineEntity = playerGraphics.player.abstractCreature.GetOnlineObject();
                 if (onlineEntity == null || !onlineEntity.isMine) return;
 
-                // Solo emitir si hay sesión Meadow activa.
                 if (OnlineManager.lobby == null || !OnlineManager.lobby.isAvailable) return;
 
                 string slugcatName = playerGraphics.player.slugcatStats.name.value;
@@ -182,11 +168,117 @@ namespace DMSxMeadow
             }
         }
 
-        /// <summary>
-        /// Entrada de jugador a la sala: el jugador local re-emite su handshake hacia el
-        /// recién llegado. El dedupe interno de BroadcastHandshake (SentPlayersForCurrentSkin)
-        /// hace que solo el jugador nuevo reciba el estado actual de la skin local.
-        /// </summary>
+        // ===================================================================
+        // P4: RESOLUCIÓN DEL SLUGCAT LOCAL SEGÚN EL CONTEXTO
+        // ===================================================================
+
+        private static string LastEmittedLobbySlugcat = null;
+
+        private static bool _handshakeReemitPending;
+
+        public static void RequestHandshakeReemit()
+        {
+            _handshakeReemitPending = true;
+        }
+
+        private static bool MeadowInterfaceActive = false;
+
+        private static bool RandomSlugcatSkipLogged = false;
+
+        private static bool IsMeadowInterfaceProcessId(ProcessManager.ProcessID id)
+        {
+            return id == RainMeadow.RainMeadow.Ext_ProcessID.MeadowMenu
+                || id == RainMeadow.RainMeadow.Ext_ProcessID.LobbySelectMenu
+                || id == RainMeadow.RainMeadow.Ext_ProcessID.LobbyCreateMenu
+                || id == RainMeadow.RainMeadow.Ext_ProcessID.ArenaLobbyMenu
+                || id == RainMeadow.RainMeadow.Ext_ProcessID.StoryMenu
+                || id == RainMeadow.RainMeadow.Ext_ProcessID.SpectatorMode
+                || id == RainMeadow.RainMeadow.Ext_ProcessID.OnlineManager;
+        }
+
+        private static bool IsMeadowInterfaceProcess(MainLoopProcess currentMainLoop)
+        {
+            return currentMainLoop != null && IsMeadowInterfaceProcessId(currentMainLoop.ID);
+        }
+
+        private static void ProcessManager_PostSwitchMainProcess(On.ProcessManager.orig_PostSwitchMainProcess orig, ProcessManager self, ProcessManager.ProcessID ID)
+        {
+            orig(self, ID);
+
+            try
+            {
+                bool newIsInterface = IsMeadowInterfaceProcessId(ID);
+                if (newIsInterface && !MeadowInterfaceActive)
+                {
+                    MeadowInterfaceActive = true;
+                    bool lobbyActive = OnlineManager.lobby != null && OnlineManager.lobby.isAvailable;
+                    var (lobbySlugcat, lobbyMode) = lobbyActive ? ResolveLocalSlugcatName() : (null, null);
+                    Plugin.Logger.LogInfo($"[DMSxMeadow] 🎭 Interfaz Meadow detectada (proceso '{ID}', lobby {(lobbyActive ? "ACTIVA" : "sin lobby aún")}). Poll ON. Slugcat: '{lobbySlugcat ?? "sin resolver"}'{(lobbyMode != null ? $" (modo {lobbyMode})" : "")}.");
+                    return;
+                }
+
+                if (!newIsInterface && MeadowInterfaceActive)
+                {
+                    MeadowInterfaceActive = false;
+                    LastEmittedLobbySlugcat = null;
+
+                    if (ID == ProcessManager.ProcessID.Game)
+                    {
+                        Plugin.Logger.LogInfo("[DMSxMeadow] 🎮 Entrando a partida (proceso 'Game'): la memoria NO se libera — la descarga de skins continúa en segundo plano.");
+                    }
+                    else if (ID == ProcessManager.ProcessID.MainMenu)
+                    {
+                        int released = SkinRegistration.WipeAllMemory();
+                        Plugin.Logger.LogInfo($"[DMSxMeadow] 🚪 Volviste al MainMenu: wipe total del refactor ejecutado ({released} entradas liberadas). Poll OFF.");
+                    }
+                    else
+                    {
+                        Plugin.Logger.LogInfo($"[DMSxMeadow] 🚪 Saliste de la interfaz Meadow (proceso actual: '{ID}'). Poll OFF — el wipe del refactor se dispara al volver al MainMenu.");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"Hook error (PostSwitchMainProcess): {ex.Message}");
+            }
+        }
+
+        internal static (string Slugcat, string Mode) ResolveLocalSlugcatName()
+        {
+            var currentMainLoop = RWCustom.Custom.rainWorld?.processManager?.currentMainLoop;
+
+            if (currentMainLoop is RainWorldGame rainWorldGame)
+            {
+                string realized = rainWorldGame.FirstRealizedPlayer?.slugcatStats.name.value;
+                return (realized, realized == null ? null : "partida");
+            }
+
+            if (OnlineManager.lobby == null || !OnlineManager.lobby.isAvailable) return (null, null);
+
+            if (OnlineManager.lobby.gameMode is ArenaOnlineGameMode)
+            {
+                var playingAs = ArenaHelpers.GetArenaClientSettings(OnlineManager.mePlayer)?.playingAs;
+                if (playingAs == null || playingAs == RainMeadow.RainMeadow.Ext_SlugcatStatsName.OnlineRandomSlugcat || playingAs == RainMeadow.RainMeadow.Ext_SlugcatStatsName.OnlineOverseerSpectator)
+                {
+                    if (playingAs == RainMeadow.RainMeadow.Ext_SlugcatStatsName.OnlineRandomSlugcat && !RandomSlugcatSkipLogged)
+                    {
+                        RandomSlugcatSkipLogged = true;
+                        Plugin.Logger.LogDebug("[DMSxMeadow] 🎲 Slugcat del lobby es 'MeadowRandom': se omite la emisión del handshake (se retoma al realizarse en partida).");
+                    }
+                    return (null, "arena");
+                }
+                return (playingAs.value, "arena");
+            }
+
+            if (OnlineManager.lobby.gameMode is StoryGameMode storyGameMode)
+            {
+                string slugcat = storyGameMode.preferredSlug?.value ?? storyGameMode.currentCampaign?.value;
+                return (slugcat, "historia");
+            }
+
+            return (null, null);
+        }
+
         private static void MatchmakingManager_HandleJoin(
             Action<MatchmakingManager, OnlinePlayer> orig,
             MatchmakingManager self,
@@ -199,16 +291,11 @@ namespace DMSxMeadow
                 if (player == null || player.isMe) return;
                 if (OnlineManager.lobby == null || !OnlineManager.lobby.isAvailable) return;
 
-                string slugcatName = null;
-                var rainWorldGame = RWCustom.Custom.rainWorld?.processManager?.currentMainLoop as RainWorldGame;
-                if (rainWorldGame?.FirstRealizedPlayer != null)
-                {
-                    slugcatName = rainWorldGame.FirstRealizedPlayer.slugcatStats.name.value;
-                }
-
+                var (slugcatName, mode) = ResolveLocalSlugcatName();
                 if (string.IsNullOrEmpty(slugcatName)) return;
 
-                Plugin.Logger.LogInfo($"[DMSxMeadow] Jugador {player.id} entró a la sala. Re-emitiendo handshake local hacia él...");
+                LastEmittedLobbySlugcat = slugcatName;
+                Plugin.Logger.LogDebug($"[DMSxMeadow] Jugador {player.id} entró a la sala ({mode ?? "sin modo"}: '{slugcatName}'). Re-emitiendo handshake local hacia él...");
                 DMSNetworkTester.SkinSerializer.BroadcastHandshake(slugcatName);
             }
             catch (Exception ex)
@@ -217,11 +304,6 @@ namespace DMSxMeadow
             }
         }
 
-        /// <summary>
-        /// Salida de jugador: limpieza total de sus datos en memoria (skin cache por emisor,
-        /// transferencias incompletas, registro de destinatarios) y de su carpeta de caché en
-        /// disco si quedó huérfana. Hook en la fuente común de desconexión de Steam y LAN.
-        /// </summary>
         private static void MatchmakingManager_HandleDisconnect(
             Action<MatchmakingManager, OnlinePlayer> orig,
             MatchmakingManager self,
@@ -236,11 +318,10 @@ namespace DMSxMeadow
                 string steamId = DMSNetworkTester.SkinSerializer.GetPlayerSteamId(player);
                 if (string.IsNullOrEmpty(steamId)) return;
 
-                int clearedSkins = SkinRegistration.ClearCachedSkinsFor(steamId);
                 DMSNetworkTester.SkinSerializer.ForgetPlayer(steamId);
                 SkinTransfer.ForgetPlayer(player);
 
-                Plugin.Logger.LogInfo($"[DMSxMeadow] Jugador {player.id} salió. Limpieza: {clearedSkins} skin(s) de caché de memoria, transferencias y registro de envíos purgados.");
+                Plugin.Logger.LogDebug($"[DMSxMeadow] Jugador {player.id} salió. Estado de transferencias y envíos purgados (su skin en memoria se conserva — DECISIONES §4).");
             }
             catch (Exception ex)
             {
@@ -248,14 +329,6 @@ namespace DMSxMeadow
             }
         }
 
-        /// <summary>
-        /// Fin de la sesión online (LeaveLobby): el HOST abandonó el lobby, salida
-        /// voluntaria o error de conexión. En los clientes HandleDisconnect del host
-        /// nunca llega (el lobby se destruye y RainMeadow cierra aquí), así que se
-        /// purga TODO el estado recibido: skins de memoria, carpetas renombradas en
-        /// disco, customizaciones, transferencias y recreaciones pendientes.
-        /// El guard (lobby != null antes de orig) evita limpiar al arrancar el juego.
-        /// </summary>
         private static void OnlineManager_LeaveLobby(Action orig)
         {
             bool wasInLobby = OnlineManager.lobby != null;
@@ -265,14 +338,13 @@ namespace DMSxMeadow
 
             try
             {
-                int clearedSkins = SkinRegistration.ClearAllCachedSkins();
                 DMSNetworkTester.SkinSerializer.ForgetAllPlayers();
                 SkinTransfer.ClearAllTransfers();
                 PendingRecreateSteamIds.Clear();
                 RealizedPlayersBySteamId.Clear();
                 LastNoSlugLogBySteamId.Clear();
 
-                Plugin.Logger.LogInfo($"[DMSxMeadow] 🧹 Sesión terminada: {clearedSkins} skin(s) de caché en memoria/disco, customizaciones y transferencias purgadas.");
+                Plugin.Logger.LogDebug($"[DMSxMeadow] 🧹 Sesión terminada: customizaciones y transferencias purgadas (skins en memoria se conservan hasta volver al MainMenu — DECISIONES §4).");
             }
             catch (Exception ex)
             {
@@ -280,18 +352,56 @@ namespace DMSxMeadow
             }
         }
 
-        /// <summary>
-        /// Tick del mod: avanza la cola throttled de envío de archivos (1 paquete cada
-        /// SendIntervalSeconds), reintenta archivos sin ACK, y reintenta la petición
-        /// inicial de skin si no llegó ningún archivo a tiempo (ver SkinTransfer.cs).
-        /// También procesa las recreaciones de slug pendientes (skin recién llegada).
-        /// </summary>
         private void RainWorld_Update(On.RainWorld.orig_Update orig, RainWorld self)
         {
             orig(self);
 
             try
             {
+                if (_handshakeReemitPending)
+                {
+                    _handshakeReemitPending = false;
+                    if (OnlineManager.lobby != null && OnlineManager.lobby.isAvailable)
+                    {
+                        var (slugcat, _) = ResolveLocalSlugcatName();
+                        if (slugcat != null)
+                        {
+                            LastEmittedLobbySlugcat = slugcat;
+                            SkinTransfer.AbortAllOutgoing();
+                            Plugin.Logger.LogDebug("[DMSxMeadow] 🎭 Cambio de flag de compartir detectado. Re-emitiendo handshake...");
+                            DMSNetworkTester.SkinSerializer.BroadcastHandshake(slugcat);
+                        }
+                    }
+                }
+
+                if (OnlineManager.lobby != null && OnlineManager.lobby.isAvailable)
+                {
+                    if (RWCustom.Custom.rainWorld?.processManager?.currentMainLoop is not RainWorldGame)
+                    {
+                        var (lobbySlugcat, _) = ResolveLocalSlugcatName();
+                        if (lobbySlugcat != null)
+                        {
+                            if (lobbySlugcat != LastEmittedLobbySlugcat)
+                            {
+                                LastEmittedLobbySlugcat = lobbySlugcat;
+                                SkinTransfer.AbortAllOutgoing();
+                                Plugin.Logger.LogDebug($"[DMSxMeadow] 🎭 Cambio de slugcat en lobby detectado: '{lobbySlugcat}'. Re-emitiendo handshake (los envíos en curso de la skin anterior fueron abortados)...");
+                                DMSNetworkTester.SkinSerializer.BroadcastHandshake(lobbySlugcat);
+                            }
+                        }
+                        else
+                        {
+                            LastEmittedLobbySlugcat = null;
+                        }
+                    }
+                }
+                else
+                {
+                    LastEmittedLobbySlugcat = null;
+                }
+
+                DMSNetworkTester.SkinSerializer.PollMissingHandshakes();
+
                 SkinTransfer.UpdatePendingTransfers();
                 SkinTransfer.RetryPendingRequests();
 
@@ -317,11 +427,6 @@ namespace DMSxMeadow
 
         // ===================================================================
         // RECREACIÓN EN CALIENTE DEL SLUG REMOTO
-        // Cuando llega la customización/skin de un jugador (handshake o archivos
-        // completados), programamos la recreación de sus gráficos. DMS nativo
-        // procesa PlayerGraphicsData.ScheduleForRecreation en el siguiente
-        // SpriteLeaser.Update (PlayerGraphicsHooks.cs:317) y regenera el atuendo
-        // con la customización actual — sin esperar a cruzar una tubería.
         // ===================================================================
 
         private static readonly HashSet<string> PendingRecreateSteamIds = new HashSet<string>(StringComparer.Ordinal);
@@ -329,7 +434,6 @@ namespace DMSxMeadow
         private static readonly Dictionary<string, WeakReference> RealizedPlayersBySteamId =
             new Dictionary<string, WeakReference>(StringComparer.Ordinal);
 
-        // Evita loguear "Sin slug realizado" cada frame: máximo 1 mensaje cada 5 segs por steamId.
         private static readonly Dictionary<string, float> LastNoSlugLogBySteamId =
             new Dictionary<string, float>(StringComparer.Ordinal);
 
@@ -343,12 +447,6 @@ namespace DMSxMeadow
             Logger.LogDebug($"[DMSxMeadow] ⏳ Recreación diferida para {steamId} (se reintentará en el próximo Update).");
         }
 
-        /// <summary>
-        /// Recrea TODOS los slugs realizados (incluido el local). Se usa después de
-        /// ReloadAtlases(): la recarga de atlas invalida los FAtlasElement de los
-        /// sprites ya dibujados y deja los slugs invisibles/blancos hasta que se
-        /// recrean (síntoma "me volví invisible al recibir la skin del otro").
-        /// </summary>
         internal static void ScheduleRecreateAllSlugs()
         {
             int scheduled = 0;
@@ -369,7 +467,7 @@ namespace DMSxMeadow
 
             if (scheduled > 0)
             {
-                Logger.LogInfo($"[DMSxMeadow] 🔄 Recreación de {scheduled} slug(s) programada tras la recarga de atlas (evita sprites inválidos).");
+                Logger.LogDebug($"[DMSxMeadow] 🔄 Recreación de {scheduled} slug(s) programada tras la recarga de atlas (evita sprites inválidos).");
             }
         }
 
@@ -405,10 +503,8 @@ namespace DMSxMeadow
                     return false;
                 }
 
-                // Vía 1: registro de players visto desde el hook (fiable también en shelter/entrada).
                 if (TryRecreateFromCache(steamId)) return true;
 
-                // Vía 2: escaneo de gameState.Players (fallback).
                 bool foundSlug = false;
                 foreach (AbstractCreature absPlayer in gameState.Players)
                 {
@@ -471,19 +567,46 @@ namespace DMSxMeadow
 
                             string slugcatName = player.slugcatStats.name.value;
 
-                            // Registra el jugador bajo su steamId: la vía fiable para
-                            // encontrar al slug remoto y recrearlo en caliente cuando
-                            // llegue su skin (sin esperar a cruzar una tubería).
                             RealizedPlayersBySteamId[steamId] = new WeakReference(player);
 
-                            // Si había una recreación pendiente para él, la aplicamos aquí
-                            // mismo sobre sus gráficos reales (sin depender del Update).
                             if (PendingRecreateSteamIds.Remove(steamId))
                             {
                                 ScheduleRecreationFor(player, steamId);
                             }
 
-                            // D1: asignación manual > caché recibida por handshake > default.
+                            if (SkinBanManager.IsBanned(steamId))
+                            {
+                                if (DefaultSkinDebugLogged.Add("banned|" + steamId + "|" + slugcatName))
+                                {
+                                    Plugin.Logger.LogDebug($"[DMSxMeadow] Slug de {steamId} ({slugcatName}) baneado localmente: aplicando skin default (la cola se conserva para evitar que se estire).");
+                                }
+
+                                // Strip only the custom skin parts, keep the tail geometry: changing tail
+                                // size mid-game makes the tail sprite stick and stretch abnormally.
+                                var bannedCustomization = MeadowProfileManager.GetCustomizationBySteamID(steamId, slugcatName);
+                                if (bannedCustomization == null)
+                                {
+                                    bannedCustomization = DMSNetworkTester.SkinSerializer.GetReceivedCustomization(steamId, slugcatName);
+                                }
+
+                                if (bannedCustomization != null)
+                                {
+                                    var bannedWithTail = bannedCustomization.Copy();
+                                    bannedWithTail.CustomSprites.Clear();
+                                    // Keep tail geometry (size/shape) but reset its color to default.
+                                    bannedWithTail.CustomTail.ColorHex = null;
+                                    bannedWithTail.PlayerNumber = 0;
+                                    return bannedWithTail;
+                                }
+
+                                var bannedClean = new DressMySlugcat.Customization
+                                {
+                                    Slugcat = slugcatName,
+                                    PlayerNumber = 0
+                                };
+                                return bannedClean;
+                            }
+
                             var customization = MeadowProfileManager.GetCustomizationBySteamID(steamId, slugcatName);
                             if (customization == null)
                             {
@@ -497,10 +620,6 @@ namespace DMSxMeadow
                                 return result;
                             }
 
-                            // Slug remoto sin customización: devolver una customización
-                            // limpia en vez de caer al orig() de DMS, que no distingue
-                            // identidad y aplicaría la skin local del observador al slug
-                            // ajeno (síntoma "clon de mi skin" reportado en pruebas).
                             if (!onlineEntity.isMine)
                             {
                                 if (DefaultSkinDebugLogged.Add(steamId + "|" + slugcatName))
@@ -515,13 +634,6 @@ namespace DMSxMeadow
                                 return clean;
                             }
 
-                            // Slug LOCAL sin customización recibida ni de perfil: el orig()
-                            // de DMS devuelve la skin guardada en SaveManager, pero NREa
-                            // (DressMySlugcat/Customization.cs:58) si no existe entrada para
-                            // este (slugcat, playerNumber) — p.ej. playerNumber de la sesión
-                            // por encima de controls.Length en InitSlugcatCustomizations
-                            // (SaveManager.cs:52). El NRE deja InitiateCustomGraphics a
-                            // medias y el slug queda invisible (bug visto en pruebas).
                             if (!HasSavedCustomization(slugcatName, player.playerState?.playerNumber ?? 0))
                             {
                                 if (DefaultSkinDebugLogged.Add("local-clean|" + slugcatName))
@@ -545,9 +657,6 @@ namespace DMSxMeadow
                 Logger.LogError(ex.StackTrace);
             }
 
-            // Fallback fuera del map (o tras excepción controlada): el orig() de DMS
-            // solo es seguro si existe entrada en SaveManager para este (slugcat,
-            // playerNumber); sin ella, NREa en Customization.cs:58.
             try
             {
                 if (player?.playerState != null &&
@@ -589,11 +698,6 @@ namespace DMSxMeadow
         private static bool MeadowCompatibility_CheckNonselfHook(
             Func<Player, bool> orig, Player self)
         {
-            // Respetar la opción nativa de DMS "DefaultMeadowSkins": si el usuario la tiene
-            // ON, DMS aplica la piel por defecto a los jugadores remotos (return null en
-            // InitiateCustomGraphics, PlayerGraphicsHooks.cs:518) y nuestras skins
-            // recibidas no deben interferir. Si está OFF, forzamos false para que DMS
-            // procese a los remotos y nuestras customizaciones recibidas apliquen.
             try
             {
                 if (DressMySlugcat.Plugin.Options != null && DressMySlugcat.Plugin.Options.DefaultMeadowSkins.Value)
@@ -615,6 +719,7 @@ namespace DMSxMeadow
         {
             On.RainWorld.OnModsInit -= OnModsInit;
             On.RainWorld.Update -= RainWorld_Update;
+            On.ProcessManager.PostSwitchMainProcess -= ProcessManager_PostSwitchMainProcess;
             On.RoomCamera.SpriteLeaser.ctor -= SpriteLeaser_Ctor_Hook;
             customizationHook?.Dispose();
             handleJoinHook?.Dispose();
@@ -622,6 +727,9 @@ namespace DMSxMeadow
             leaveLobbyHook?.Dispose();
             meadowCheckHook?.Dispose();
             FancyMenuHookHandler.Dispose();
+            SpectatorPlayerButtonHook.Dispose();
+            StoryLobbyShareSkinIndicator.Dispose();
+            PlayerNameColorHooks.Dispose();
         }
     }
 }

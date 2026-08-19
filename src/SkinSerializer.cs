@@ -16,10 +16,6 @@ namespace DMSxMeadow
             private static string lastSentJsonCustomization = "";
             private static bool lastSentShareSkin = false;
 
-            /// <summary>
-            /// Customizaciones recibidas por handshake, indexadas por SteamID del emisor
-            /// y luego por slugcat. H-2: la piel del jugador remoto se aplica aquí.
-            /// </summary>
             private static readonly Dictionary<string, Dictionary<string, DressMySlugcat.Customization>> ReceivedCustomizations =
                 new Dictionary<string, Dictionary<string, DressMySlugcat.Customization>>(StringComparer.Ordinal);
 
@@ -34,7 +30,7 @@ namespace DMSxMeadow
                 }
 
                 bySlugcat[slugcatName] = customization.Copy();
-                Plugin.Logger.LogInfo($"[DMSxMeadow] 💾 Customización de '{slugcatName}' guardada para el jugador {steamId} (caché de memoria).");
+                Plugin.Logger.LogDebug($"[DMSxMeadow] 💾 Customización de '{slugcatName}' guardada para el jugador {steamId} (caché de memoria).");
             }
 
             public static DressMySlugcat.Customization GetReceivedCustomization(string steamId, string slugcatName)
@@ -51,10 +47,6 @@ namespace DMSxMeadow
                 return null;
             }
 
-            // H-5: el slug del emisor referencia la skin por su id ORIGINAL (el del handshake);
-            // en disco vive renombrada. Se reescribe el id en el momento de la consulta y es
-            // idempotente: los ids ya renombrados no vuelven a matchear contra la tabla de
-            // remaps (original -> renombrado), así que la instancia almacenada solo se toca una vez.
             private static readonly HashSet<string> RemapAppliedLogKeys = new HashSet<string>(StringComparer.Ordinal);
 
             private static void ApplyRemapToCustomization(string steamId, DressMySlugcat.Customization customization)
@@ -75,7 +67,7 @@ namespace DMSxMeadow
 
                 if (changed && RemapAppliedLogKeys.Add(steamId + "|" + customization.Slugcat))
                 {
-                    Plugin.Logger.LogInfo($"[DMSxMeadow] 🔄 Customización de {steamId} ({customization.Slugcat}) re-escrita con ids renombrados de caché (H-5).");
+                    Plugin.Logger.LogDebug($"[DMSxMeadow] 🔄 Customización de {steamId} ({customization.Slugcat}) re-escrita con ids renombrados de caché (H-5).");
                 }
             }
 
@@ -121,8 +113,12 @@ namespace DMSxMeadow
 
                 public static string SerializeLocalCustomization(string slugcatName)
                 {
-                    var customization = DressMySlugcat.Customization.For(slugcatName, 0);
-                    if (customization == null) return null;
+                    var customization = MeadowProfileManager.GetCustomizationBySteamID(GetLocalSteamId(), slugcatName);
+                    if (customization == null)
+                    {
+                        customization = DressMySlugcat.Customization.For(slugcatName, 0);
+                        if (customization == null) return null;
+                    }
 
                     var dto = new DMSCustomizationDTO
                     {
@@ -209,51 +205,34 @@ namespace DMSxMeadow
                     {
                         SentPlayersForCurrentSkin.Clear();
                         lastSentJsonCustomization = "";
-                        Plugin.Logger.LogWarning("[DMSxMeadow] No se puede emitir el handshake: No hay lobby activa.");
+                        Plugin.Logger.LogDebug("[DMSxMeadow] No se puede emitir el handshake: No hay lobby activa.");
                         return;
                     }
-
-                    var rainWorldGame = RWCustom.Custom.rainWorld?.processManager?.currentMainLoop as RainWorldGame;
-                    Player localPlayer = rainWorldGame?.Players?.Select(ap => ap?.realizedCreature as Player).FirstOrDefault(p => p != null && (p.abstractCreature.GetOnlineObject()?.isMine ?? false));
-                    if (localPlayer == null) return;
 
                     string jsonCustomization = DMSCustomizationDTO.SerializeLocalCustomization(slugcatName);
                     if (string.IsNullOrEmpty(jsonCustomization))
                     {
-                        Plugin.Logger.LogWarning($"[DMSxMeadow] No se encontró personalización local para '{slugcatName}'.");
+                        Plugin.Logger.LogDebug($"[DMSxMeadow] No se encontró personalización local para '{slugcatName}'.");
                         return;
                     }
 
                     bool localShareSkin = DMSxMeadowOptions.ShareSkinEnabled;
 
-                    // Re-emitir si cambió la skin O el bit de consentimiento: el handshake
-                    // viaja una sola vez por destinatario, así que si el usuario toca la
-                    // opción ShareSkin después de que el handshake ya salió, el otro
-                    // jugador se quedaría con el bit viejo (bug reportado en pruebas).
                     if (jsonCustomization != lastSentJsonCustomization || localShareSkin != lastSentShareSkin)
                     {
                         lastSentJsonCustomization = jsonCustomization;
                         lastSentShareSkin = localShareSkin;
                         SentPlayersForCurrentSkin.Clear();
-                        Plugin.Logger.LogInfo("[DMSxMeadow] Detectado cambio de skin local o de flag de compartir. Reiniciando registro de envíos...");
+                        Plugin.Logger.LogDebug("[DMSxMeadow] Detectado cambio de skin local o de flag de compartir. Reiniciando registro de envíos...");
                     }
 
-                    var dto = JsonConvert.DeserializeObject<DMSCustomizationDTO>(jsonCustomization);
-                    var requiredSkins = dto?.CustomSprites?.Select(s => s.SpriteSheetId).Where(id => !string.IsNullOrEmpty(id) && !SkinRegistration.NativeDmsSkins.Contains(id)).Distinct().ToList() ?? new List<string>();
-
-                    var handshake = new MeadowHandshakeDTO
-                    {
-                        SteamId = GetLocalSteamId(),
-                        Slugcat = slugcatName,
-                        ShareSkin = localShareSkin,
-                        RequiredSpriteSheetIds = requiredSkins,
-                        CustomizationJson = jsonCustomization
-                    };
-
-                    string payloadJson = JsonConvert.SerializeObject(handshake);
-                    Plugin.Logger.LogInfo($"[DMSxMeadow] Transmitiendo Handshake RPC ({payloadJson.Length} bytes)...");
+                    string payloadJson = BuildHandshakePayload(slugcatName, jsonCustomization, localShareSkin);
+                    if (string.IsNullOrEmpty(payloadJson)) return;
+                    string shareBitLog = localShareSkin ? "ON" : "OFF";
 
                     SentPlayersForCurrentSkin.RemoveWhere(id => !OnlineManager.players.Select(p => GetPlayerSteamId(p)).ToHashSet().Contains(id));
+
+                    int sentCount = 0;
                     foreach (var onlinePlayer in OnlineManager.players)
                     {
                         if (onlinePlayer.isMe) continue;
@@ -263,7 +242,16 @@ namespace DMSxMeadow
 
                         onlinePlayer.InvokeRPC(RPC_ReceiveHandshake, payloadJson);
                         SentPlayersForCurrentSkin.Add(targetId);
-                        Plugin.Logger.LogInfo($"[DMSxMeadow] Skin transmitida con éxito a '{targetId}'");
+                        sentCount++;
+                    }
+
+                    if (sentCount > 0)
+                    {
+                        Plugin.Logger.LogDebug($"[DMSxMeadow] Handshake RPC enviado a {sentCount} destinatario(s) ({payloadJson.Length} bytes, ShareSkin={shareBitLog}).");
+                    }
+                    else
+                    {
+                        Plugin.Logger.LogDebug($"[DMSxMeadow] Handshake ({payloadJson.Length} bytes, ShareSkin={shareBitLog}): sin destinatarios nuevos (todo ya sincronizado).");
                     }
                 }
                 catch (Exception ex)
@@ -272,22 +260,174 @@ namespace DMSxMeadow
                 }
             }
 
-            public static void ForgetPlayer(string steamId)
+            private static string BuildHandshakePayload(string slugcatName, string jsonCustomization, bool localShareSkin)
             {
-                if (string.IsNullOrEmpty(steamId)) return;
-                bool removed = SentPlayersForCurrentSkin.Remove(steamId);
-                if (ReceivedCustomizations.Remove(steamId))
+                if (jsonCustomization == null)
                 {
-                    Plugin.Logger.LogInfo($"[DMSxMeadow] 🧹 Customizaciones recibidas del jugador '{steamId}' purgadas (abandonó).");
+                    jsonCustomization = DMSCustomizationDTO.SerializeLocalCustomization(slugcatName);
                 }
-                if (removed)
+                if (string.IsNullOrEmpty(jsonCustomization)) return null;
+
+                var dto = JsonConvert.DeserializeObject<DMSCustomizationDTO>(jsonCustomization);
+                var requiredSkins = dto?.CustomSprites?.Select(s => s.SpriteSheetId)
+                    .Where(id => !string.IsNullOrEmpty(id) && !SkinRegistration.NativeDmsSkins.Contains(id))
+                    .Distinct().ToList() ?? new List<string>();
+
+                var handshake = new MeadowHandshakeDTO
                 {
-                    Plugin.Logger.LogInfo($"[DMSxMeadow] 🧹 Destinatario '{steamId}' eliminado del registro de envíos (abandonó).");
+                    SteamId = GetLocalSteamId(),
+                    Slugcat = slugcatName,
+                    ShareSkin = localShareSkin,
+                    RequiredSpriteSheetIds = requiredSkins,
+                    CustomizationJson = jsonCustomization
+                };
+
+                return JsonConvert.SerializeObject(handshake);
+            }
+
+            public static void SendHandshakeTo(OnlinePlayer target, string reason)
+            {
+                if (target == null || target.isMe) return;
+                if (OnlineManager.lobby == null || !OnlineManager.lobby.isAvailable) return;
+
+                try
+                {
+                    var (slugcatName, _) = Plugin.ResolveLocalSlugcatName();
+                    if (string.IsNullOrEmpty(slugcatName)) return;
+
+                    string payloadJson = BuildHandshakePayload(slugcatName, null, DMSxMeadowOptions.ShareSkinEnabled);
+                    if (string.IsNullOrEmpty(payloadJson)) return;
+
+                    target.InvokeRPC(RPC_ReceiveHandshake, payloadJson);
+                    Plugin.Logger.LogDebug($"[DMSxMeadow] Handshake RPC re-enviado a {target.id} ({payloadJson.Length} bytes, ShareSkin={(DMSxMeadowOptions.ShareSkinEnabled ? "ON" : "OFF")}, motivo: {reason}).");
+                }
+                catch (Exception ex)
+                {
+                    Plugin.Logger.LogError($"[DMSxMeadow] Error reenviando handshake a {target.id}: {ex.Message}");
                 }
             }
 
-            /// <summary>Purga total al terminar la sesión (host se fue / LeaveLobby):
-            /// customizaciones recibidas de TODOS los jugadores y registro de envíos.</summary>
+            public static void RequestHandshakeFrom(string steamId)
+            {
+                if (string.IsNullOrEmpty(steamId)) return;
+                if (OnlineManager.lobby == null || !OnlineManager.lobby.isAvailable) return;
+                if (SkinBanManager.IsBanned(steamId)) return;
+
+                var target = ResolvePlayerByIdentity(steamId);
+                if (target == null || target.isMe)
+                {
+                    Plugin.Logger.LogDebug($"[DMSxMeadow] 🔄 No se re-solicitó handshake a '{steamId}': no está en la sala.");
+                    return;
+                }
+
+                target.InvokeRPC(RPC_RequestHandshake, GetLocalSteamId());
+                Plugin.Logger.LogInfo($"[DMSxMeadow] 🔄 Handshake re-solicitado a {target.id} tras desbaneo: si su ShareSkin está ON, se descargará su skin.");
+            }
+
+            [SoftRPCMethod]
+            public static void RPC_RequestHandshake(string requesterIdentity)
+            {
+                try
+                {
+                    var requester = ResolvePlayerByIdentity(requesterIdentity);
+                    if (requester == null)
+                    {
+                        Plugin.Logger.LogDebug($"[DMSxMeadow] RPC_RequestHandshake ignorado: no se encontró al remitente '{requesterIdentity}' en la lista local.");
+                        return;
+                    }
+                    SendHandshakeTo(requester, "resolicitud recibida");
+                }
+                catch (Exception ex)
+                {
+                    Plugin.Logger.LogError($"[DMSxMeadow] Error al procesar RPC_RequestHandshake: {ex}");
+                }
+            }
+
+            // --- Re-solicitud de handshakes perdidos ---
+            private class HandshakeRequestState
+            {
+                public float LastTime;
+                public int Attempts;
+                public float RearmInterval;
+            }
+
+            private static readonly Dictionary<string, HandshakeRequestState> _handshakeRequests =
+                new Dictionary<string, HandshakeRequestState>(StringComparer.Ordinal);
+
+            private const float HandshakeRequestCooldownSeconds = 10f;
+            private const int MaxHandshakeRequests = 6;
+            // Re-arm: al agotar los reintentos no se rinde para siempre; tras un silencio largo (con jitter) se reintenta.
+            private const float HandshakeRequestRearmSeconds = 105f;
+            private const float HandshakeRequestRearmJitter = 20f;
+
+            public static void PollMissingHandshakes()
+            {
+                if (OnlineManager.lobby == null || !OnlineManager.lobby.isAvailable) return;
+                if (IsDefaultMeadowSkinsEnabled()) return;
+
+                foreach (var onlinePlayer in new List<OnlinePlayer>(OnlineManager.players))
+                {
+                    try
+                    {
+                        if (onlinePlayer == null || onlinePlayer.isMe) continue;
+
+                        string steamId = GetPlayerSteamId(onlinePlayer);
+                        if (string.IsNullOrEmpty(steamId)) continue;
+                        if (ReceivedCustomizations.ContainsKey(steamId)) continue;
+                        if (SkinBanManager.IsBanned(steamId)) continue;
+                        if (!IsSteamFriendAllowed(steamId)) continue;
+
+                        if (!_handshakeRequests.TryGetValue(steamId, out var state))
+                        {
+                            _handshakeRequests[steamId] = new HandshakeRequestState
+                            {
+                                LastTime = Time.time,
+                                RearmInterval = HandshakeRequestRearmSeconds + UnityEngine.Random.Range(-HandshakeRequestRearmJitter, HandshakeRequestRearmJitter)
+                            };
+                            continue;
+                        }
+
+                        float elapsedSinceLast = Time.time - state.LastTime;
+
+                        if (state.Attempts >= MaxHandshakeRequests)
+                        {
+                            if (elapsedSinceLast < state.RearmInterval) continue;
+                            state.Attempts = 0;
+                            state.RearmInterval = HandshakeRequestRearmSeconds + UnityEngine.Random.Range(-HandshakeRequestRearmJitter, HandshakeRequestRearmJitter);
+                        }
+                        else
+                        {
+                            if (elapsedSinceLast < HandshakeRequestCooldownSeconds) continue;
+                        }
+
+                        state.LastTime = Time.time;
+                        state.Attempts++;
+
+                        onlinePlayer.InvokeRPC(RPC_RequestHandshake, GetLocalSteamId());
+                        Plugin.Logger.LogDebug($"[DMSxMeadow] 🔄 Sin handshake de {onlinePlayer.id}: solicitando re-emisión (intento {state.Attempts}/{MaxHandshakeRequests}).");
+                    }
+                    catch (Exception ex)
+                    {
+                        Plugin.Logger.LogError($"[DMSxMeadow] Error en poll de handshakes: {ex.Message}");
+                    }
+                }
+            }
+
+            public static void ForgetPlayer(string steamId)
+            {
+                if (string.IsNullOrEmpty(steamId)) return;
+                _handshakeRequests.Remove(steamId);
+                bool removed = SentPlayersForCurrentSkin.Remove(steamId);
+                if (ReceivedCustomizations.Remove(steamId))
+                {
+                    Plugin.Logger.LogDebug($"[DMSxMeadow] 🧹 Customizaciones recibidas del jugador '{steamId}' purgadas (abandonó).");
+                }
+                if (removed)
+                {
+                    Plugin.Logger.LogDebug($"[DMSxMeadow] 🧹 Destinatario '{steamId}' eliminado del registro de envíos (abandonó).");
+                }
+            }
+
             public static void ForgetAllPlayers()
             {
                 int count = ReceivedCustomizations.Count;
@@ -295,10 +435,11 @@ namespace DMSxMeadow
                 SentPlayersForCurrentSkin.Clear();
                 lastSentJsonCustomization = "";
                 lastSentShareSkin = false;
+                _handshakeRequests.Clear();
 
                 if (count > 0)
                 {
-                    Plugin.Logger.LogInfo($"[DMSxMeadow] 🧹 Customizaciones recibidas de {count} jugador(es) purgadas (sesión terminada).");
+                    Plugin.Logger.LogDebug($"[DMSxMeadow] 🧹 Customizaciones recibidas de {count} jugador(es) purgadas (sesión terminada).");
                 }
             }
 
@@ -314,45 +455,53 @@ namespace DMSxMeadow
                         return;
                     }
 
-                    // No confiamos en el arg OnlinePlayer (viaja como inLobbyId y RainMeadow
-                    // lo resuelve con PlayerFromId, que devuelve null en sesiones GOG/LAN —
-                    // "Player not found!"). La identidad viaja en el payload y se busca
-                    // contra la lista de jugadores local.
                     var sender = ResolvePlayerByIdentity(handshake.SteamId);
                     if (sender == null)
                     {
-                        Plugin.Logger.LogWarning($"[DMSxMeadow] Handshake de '{handshake.SteamId}' ignorado: no se encontró al remitente en la lista de jugadores local.");
+                        Plugin.Logger.LogDebug($"[DMSxMeadow] Handshake de '{handshake.SteamId}' ignorado: no se encontró al remitente en la lista de jugadores local.");
                         return;
                     }
 
-                    Plugin.Logger.LogInfo($"================ [DMSxMeadow RPC HANDSHAKE] ================");
-                    Plugin.Logger.LogInfo($" Emisor SteamID : {handshake.SteamId}");
-                    Plugin.Logger.LogInfo($" Emisor Player  : {sender.id}");
-                    Plugin.Logger.LogInfo($" Slugcat        : {handshake.Slugcat}");
-                    Plugin.Logger.LogInfo($" ShareSkin Bit  : {handshake.ShareSkin}");
-                    Plugin.Logger.LogInfo($" Skins usadas   : {(handshake.RequiredSpriteSheetIds.Count > 0 ? string.Join(", ", handshake.RequiredSpriteSheetIds) : "Ninguna (Default)")}");
+                    string senderSteamId = GetPlayerSteamId(sender);
+                    if (SkinBanManager.IsBanned(senderSteamId))
+                    {
+                        Plugin.Logger.LogDebug($"[DMSxMeadow] 🚫 Handshake de '{handshake.Slugcat}' ({sender.id} / {senderSteamId}) IGNORADO: jugador baneado localmente. Se verá con la piel por defecto.");
+                        return;
+                    }
+
+                    if (!IsSteamFriendAllowed(senderSteamId))
+                    {
+                        Plugin.Logger.LogDebug($"[DMSxMeadow] 🤝 Handshake de '{handshake.Slugcat}' ({sender.id} / {senderSteamId}) IGNORADO: 'solo amigos' ON y el emisor no es amigo de Steam del jugador local.");
+                        return;
+                    }
 
                     var customization = DMSCustomizationDTO.DeserializeToCustomization(handshake.CustomizationJson);
-                    Plugin.Logger.LogInfo($" Customization  : {(customization != null ? "OK (Deserializado correctamente)" : "ERROR")}");
+                    Plugin.Logger.LogDebug($"[DMSxMeadow] 📨 Handshake de '{handshake.Slugcat}' ({sender.id} / {handshake.SteamId}): ShareSkin={(handshake.ShareSkin ? "ON" : "OFF")}, skins=[{(handshake.RequiredSpriteSheetIds.Count > 0 ? string.Join(", ", handshake.RequiredSpriteSheetIds) : "default")}], custom={(customization != null ? "OK" : "ERROR")}.");
 
-                    string senderSteamId = GetPlayerSteamId(sender);
                     if (customization != null && !string.IsNullOrEmpty(senderSteamId))
                     {
                         StoreReceivedCustomization(senderSteamId, handshake.Slugcat, customization);
 
-                        // Recrear en caliente el slug remoto: aplica la customización
-                        // recién recibida sin esperar a que cruce una tubería.
                         Plugin.ScheduleRecreateForSteamId(senderSteamId);
+
+                        if (ReceivedCustomizations.TryGetValue(senderSteamId, out var bySlugcat))
+                        {
+                            var staleKeys = bySlugcat.Keys.Where(k => k != handshake.Slugcat).ToList();
+                            foreach (string staleKey in staleKeys) bySlugcat.Remove(staleKey);
+                            if (staleKeys.Count > 0)
+                            {
+                                Plugin.Logger.LogDebug($"[DMSxMeadow] 🧹 Customización(es) del slugcat anterior ({string.Join(", ", staleKeys)}) descartada(s) para {senderSteamId} (handshake nuevo de '{handshake.Slugcat}').");
+                            }
+                        }
                     }
+
+                    SkinTransfer.ForgetSenderState(sender);
 
                     if (handshake.ShareSkin)
                     {
-                        // Respetar DefaultMeadowSkins de DMS: si el usuario local la tiene ON
-                        // no verá las skins de otros jugadores (DMS les aplica default), así
-                        // que pedir los archivos sería trabajo y tráfico inútiles.
                         if (IsDefaultMeadowSkinsEnabled())
                         {
-                            Plugin.Logger.LogInfo(" El receptor tiene 'DefaultMeadowSkins' de DMS ACTIVADO: no se solicitarán archivos de skin.");
+                            Plugin.Logger.LogDebug(" El receptor tiene 'DefaultMeadowSkins' de DMS ACTIVADO: no se solicitarán archivos de skin.");
                         }
                         else
                         {
@@ -364,30 +513,20 @@ namespace DMSxMeadow
                                     continue;
                                 }
 
-                                // Requisito 11/08/2026 (aislamiento absoluto del tratamiento de skins de
-                                // dmsxmeadow): se pide SIEMPRE desde la máquina origen. Ni el
-                                // pack local/workshop del receptor (eliminado el 10/08) ni la
-                                // copia en caché de este emisor (memoria/disco) cortocircuitan
-                                // la descarga — el contenido vigente del emisor viaja siempre.
-                                Plugin.Logger.LogInfo($" - Skin '{skinId}': solicitando transmisión a {sender?.id}...");
+                                if (SkinRegistration.HasSkinInMemory(senderSteamId, skinId))
+                                {
+                                    Plugin.Logger.LogDebug($" - Skin '{skinId}': reusando copia en memoria de esta sesión (sin re-descarga).");
+                                    continue;
+                                }
 
-                                if (sender != null)
-                                {
-                                    SkinTransfer.RequestSkinFromPlayer(sender, skinId);
-                                }
-                                else
-                                {
-                                    Plugin.Logger.LogError($" - Skin '{skinId}': No se pudo solicitar porque sender (RPCManager.currentAuthor) es nulo.");
-                                }
+                                SkinTransfer.RequestSkinFromPlayer(sender, skinId);
                             }
                         }
                     }
                     else
                     {
-                        Plugin.Logger.LogInfo(" El emisor tiene 'ShareSkin' desactivado. Se omitirá la solicitud de archivos.");
+                        Plugin.Logger.LogDebug(" El emisor tiene 'ShareSkin' desactivado. Se omitirá la solicitud de archivos.");
                     }
-
-                    Plugin.Logger.LogInfo($"============================================================");
                 }
                 catch (Exception ex)
                 {
@@ -395,9 +534,6 @@ namespace DMSxMeadow
                 }
             }
 
-            /// <summary>ACK de archivo individual (canal 0, RPC de sesión). Lo manda el
-            /// receptor de un CustomPacket de skin en cuanto lo procesa, para que el emisor
-            /// (SkinTransfer) sepa que no necesita reenviarlo.</summary>
             [SoftRPCMethod]
             public static void RPC_AckSkinFile(string receiverIdentity, string skinId, int fileIndex)
             {
@@ -421,7 +557,7 @@ namespace DMSxMeadow
                     var requester = ResolvePlayerByIdentity(requesterIdentity);
                     if (requester == null)
                     {
-                        Plugin.Logger.LogWarning($"[DMSxMeadow] RPC_RequestSkin para '{skinId}' ignorado: no se encontró '{requesterIdentity}' en la lista de jugadores local.");
+                        Plugin.Logger.LogDebug($"[DMSxMeadow] RPC_RequestSkin para '{skinId}' ignorado: no se encontró '{requesterIdentity}' en la lista de jugadores local.");
                         return;
                     }
 
@@ -433,11 +569,11 @@ namespace DMSxMeadow
 
                     if (!DMSxMeadowOptions.ShareSkinEnabled)
                     {
-                        Plugin.Logger.LogInfo($"[DMSxMeadow] RPC_RequestSkin de {requester.id} para '{skinId}' RECHAZADO: flag de compartir skin está OFF (Capa 0).");
+                        Plugin.Logger.LogDebug($"[DMSxMeadow] RPC_RequestSkin de {requester.id} para '{skinId}' RECHAZADO: flag de compartir skin está OFF (Capa 0).");
                         return;
                     }
 
-                    Plugin.Logger.LogInfo($"[DMSxMeadow] El jugador {requester.id} ha solicitado la transmisión de la skin '{skinId}'.");
+                    Plugin.Logger.LogDebug($"[DMSxMeadow] El jugador {requester.id} ha solicitado la transmisión de la skin '{skinId}'.");
                     SkinTransfer.SendSkinToPlayer(requester, skinId);
                 }
                 catch (Exception ex)
@@ -453,19 +589,13 @@ namespace DMSxMeadow
                 return player.id.ToString();
             }
 
-            /// <summary>Resuelve un jugador de la lista local por su identidad (SteamID, o
-            /// id de RainMeadow en sesiones sin Steam). Reemplaza la dependencia del arg
-            /// OnlinePlayer de los RPC, que RainMeadow no puede resolver en GOG/LAN.</summary>
             internal static OnlinePlayer ResolvePlayerByIdentity(string identity)
             {
                 if (string.IsNullOrEmpty(identity)) return null;
                 return OnlineManager.players.FirstOrDefault(p => GetPlayerSteamId(p) == identity);
             }
 
-            /// <summary>SteamID local para el handshake, con fallback para sesiones sin
-            /// Steamworks inicializado (p.ej. Minecraft LAN con copia sin Steam): en ese
-            /// caso se usa la identidad de RainMeadow del jugador local.</summary>
-            private static string GetLocalSteamId()
+            internal static string GetLocalSteamId()
             {
                 try
                 {
@@ -478,10 +608,6 @@ namespace DMSxMeadow
                 }
             }
 
-            /// <summary>True si el usuario local tiene la opción nativa de DMS
-            /// "DefaultMeadowSkins" activada (DMS aplica piel por defecto a jugadores
-            /// remotos). En ese caso respetamos la opción y apagamos nuestro flujo de
-            /// skins ajenas (no se piden archivos ni se aplican customizaciones recibidas).</summary>
             internal static bool IsDefaultMeadowSkinsEnabled()
             {
                 try
@@ -492,6 +618,34 @@ namespace DMSxMeadow
                 catch (Exception ex)
                 {
                     Plugin.Logger.LogWarning($"[DMSxMeadow] No se pudo leer DefaultMeadowSkins: {ex.Message}");
+                    return false;
+                }
+            }
+
+            internal static bool IsSteamFriendAllowed(string steamId)
+            {
+                if (!DMSxMeadowOptions.FriendsOnlyEnabled) return true;
+
+                bool steamUp;
+                try { steamUp = Steamworks.SteamUser.BLoggedOn(); }
+                catch { steamUp = false; }
+                if (!steamUp) return true;
+
+                if (string.IsNullOrEmpty(steamId) || !ulong.TryParse(steamId, out ulong rawSteamId))
+                {
+                    Plugin.Logger.LogDebug($"[DMSxMeadow] 'solo amigos' ON: identidad '{steamId}' no es un SteamID parseable → se bloquea.");
+                    return false;
+                }
+
+                try
+                {
+                    return Steamworks.SteamFriends.HasFriend(
+                        new Steamworks.CSteamID(rawSteamId),
+                        Steamworks.EFriendFlags.k_EFriendFlagImmediate);
+                }
+                catch (Exception ex)
+                {
+                    Plugin.Logger.LogWarning($"[DMSxMeadow] Error comprobando amistad de '{steamId}': {ex.Message}");
                     return false;
                 }
             }

@@ -2,6 +2,7 @@ using Menu;
 using Menu.Remix;
 using Menu.Remix.MixedUI;
 using System;
+using System.Linq;
 using UnityEngine;
 
 namespace DMSxMeadow
@@ -72,15 +73,11 @@ namespace DMSxMeadow
                 // ============================================================
                 // POSICIONAMIENTO RESPONSIVO A RESOLUCIÓN
                 // ============================================================
-                // textBoxBorder.pos.x YA incluye leftAnchor.
-                // NO restamos leftAnchor para que el desplazamiento se mantenga.
                 // ============================================================
                 float baseStartX = textBoxBorder.pos.x + (65f * playerCount) + 10f;
 
                 // ============================================================
-                // LIMITACIÓN DE SEGURIDAD: evitar invadir el área de los botones
-                // de control de DMS (reset/defaults/copy/paste) que se anclan
-                // al borde derecho de la caja en resoluciones angostas.
+                // LIMITACIÓN DE SEGURIDAD
                 // ============================================================
                 float maxSafeX = textBoxBorder.pos.x + textBoxBorder.size.x - 260f;
                 baseStartX = Mathf.Min(baseStartX, maxSafeX);
@@ -92,8 +89,7 @@ namespace DMSxMeadow
                 baseStartX += positionOffsetX;
 
                 // ============================================================
-                // FILA PROPIA: Y = -80f (debajo de Player buttons, lejos de
-                // los botones de control en Y = +20f)
+                // FILA PROPIA: Y = -80f
                 // ============================================================
                 float baseYPos = textBoxBorder.pos.y - 75f;
 
@@ -257,6 +253,7 @@ namespace DMSxMeadow
             string currentSlugcat = _fancyMenu.selectedSlugcat;
             if (currentSlugcat != _lastKnownSlugcat)
             {
+                Plugin.Logger.LogDebug($"[MEADOW-LOAD] slugcat change '{_lastKnownSlugcat}' -> '{currentSlugcat}', reloading profile {MeadowProfileManager.CurrentProfileNumber} (unsaved edits may be lost)");
                 _lastKnownSlugcat = currentSlugcat;
                 LoadProfile(MeadowProfileManager.CurrentProfileNumber);
             }
@@ -306,19 +303,37 @@ namespace DMSxMeadow
         {
             try
             {
-                if (!MeadowProfileManager.IsMeadowModeActive) return;
+                if (!MeadowProfileManager.IsMeadowModeActive)
+                {
+                    Plugin.Logger.LogDebug($"[MEADOW-SAVE] skip: meadow OFF (slugcat={_fancyMenu.selectedSlugcat}, player={_fancyMenu.selectedPlayerIndex})");
+                    return;
+                }
 
                 var customization = GetLiveCustomization();
                 if (customization != null)
                 {
                     string slugcatName = _fancyMenu.selectedSlugcat;
+                    string headSheet = GetHeadSheetId(customization);
+                    Plugin.Logger.LogDebug($"[MEADOW-SAVE] writing profile {MeadowProfileManager.CurrentProfileNumber} slugcat={slugcatName} player={_fancyMenu.selectedPlayerIndex} head={headSheet} sprites={customization.CustomSprites?.Count ?? 0}");
                     MeadowProfileManager.SaveCurrentProfile(slugcatName, customization);
+                }
+                else
+                {
+                    Plugin.Logger.LogDebug($"[MEADOW-SAVE] live customization is null");
                 }
             }
             catch (Exception ex)
             {
                 Plugin.Logger.LogError($"Error saving profile: {ex.Message}");
+                Plugin.Logger.LogError(ex.StackTrace);
             }
+        }
+
+        private static string GetHeadSheetId(DressMySlugcat.Customization customization)
+        {
+            if (customization?.CustomSprites == null) return "(none)";
+            var head = customization.CustomSprites.FirstOrDefault(s => s.Sprite == "HEAD");
+            return head?.SpriteSheetID ?? "(none)";
         }
 
         private DressMySlugcat.Customization GetLiveCustomization()
@@ -344,6 +359,8 @@ namespace DMSxMeadow
             {
                 string slugcatName = _fancyMenu.selectedSlugcat;
                 var customization = MeadowProfileManager.GetProfileCustomization(displayNumber, slugcatName);
+                string headSheet = customization?.CustomSprites?.FirstOrDefault(s => s.Sprite == "HEAD")?.SpriteSheetID ?? "(none)";
+                Plugin.Logger.LogDebug($"[MEADOW-LOAD] profile {displayNumber} slugcat={slugcatName} found={(customization != null)} head={headSheet} sprites={customization?.CustomSprites?.Count ?? 0}");
                 var live = GetLiveCustomization();
                 if (live == null)
                 {
@@ -525,6 +542,8 @@ namespace DMSxMeadow
             _lastKnownSlugcat = _fancyMenu.selectedSlugcat;
             LoadProfile(profileNumber);
 
+            Plugin.Logger.LogDebug($"[MEADOW-MODE] ACTIVATED (profile {MeadowProfileManager.CurrentProfileNumber}, slugcat={_fancyMenu.selectedSlugcat}, player={_fancyMenu.selectedPlayerIndex})");
+
             RefreshDummyAndControls();
         }
 
@@ -544,6 +563,8 @@ namespace DMSxMeadow
             _profileFieldWasHeld = false;
             _steamFieldWasHeld = false;
             _lastKnownSlugcat = "";
+
+            Plugin.Logger.LogDebug($"[MEADOW-MODE] DEACTIVATED (profile {MeadowProfileManager.CurrentProfileNumber}, slugcat={_fancyMenu.selectedSlugcat}, player={_fancyMenu.selectedPlayerIndex})");
 
             MeadowProfileManager.IsMeadowModeActive = false;
             _statusLabel.text = "";
@@ -586,6 +607,8 @@ namespace DMSxMeadow
             _steamFieldWasHeld = false;
             _lastKnownSlugcat = "";
 
+            Plugin.Logger.LogDebug($"[MEADOW-MODE] FORCE-DEACTIVATED (profile {MeadowProfileManager.CurrentProfileNumber}, slugcat={_fancyMenu.selectedSlugcat}, player={_fancyMenu.selectedPlayerIndex})");
+
             MeadowProfileManager.IsMeadowModeActive = false;
             _statusLabel.text = "";
 
@@ -593,7 +616,7 @@ namespace DMSxMeadow
         }
 
         // ============================================================
-        // Manejo de Ctrl+V para pegar desde portapapeles
+        // PEGAR DESDE PORTAPAPELES
         // ============================================================
         public void CheckPasteInput()
         {

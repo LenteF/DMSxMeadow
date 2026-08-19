@@ -17,6 +17,7 @@ namespace DMSxMeadow
         private static Hook shutdownHook;
         private static Hook customizationFor3ArgHook;
         private static Hook galleryDialogCtorHook;
+        private static Hook galleryDialogSingalHook;
         private static Dictionary<DressMySlugcat.FancyMenu, MeadowProfileUI> _uiInstances = new Dictionary<DressMySlugcat.FancyMenu, MeadowProfileUI>();
 
         private static DressMySlugcat.FancyMenu _currentFancyMenu;
@@ -122,6 +123,19 @@ namespace DMSxMeadow
                     if (hookGalleryCtor != null)
                     {
                         galleryDialogCtorHook = new Hook(galleryCtor, hookGalleryCtor);
+                    }
+                }
+
+                MethodInfo gallerySingalMethod = typeof(DressMySlugcat.GalleryDialog).GetMethod("Singal");
+                if (gallerySingalMethod != null)
+                {
+                    MethodInfo hookGallerySingal = typeof(FancyMenuHookHandler)
+                        .GetMethod("GalleryDialog_Singal_Hook",
+                            BindingFlags.NonPublic | BindingFlags.Static);
+
+                    if (hookGallerySingal != null)
+                    {
+                        galleryDialogSingalHook = new Hook(gallerySingalMethod, hookGallerySingal);
                     }
                 }
             }
@@ -281,9 +295,17 @@ namespace DMSxMeadow
 
             if (series.StartsWith("PLAYER_") && MeadowProfileManager.IsMeadowModeActive)
             {
-                if (_uiInstances.TryGetValue(self, out var ui))
+                if (self.selectedPlayerIndex != to)
                 {
-                    ui.DeactivateMeadowMode();
+                    Plugin.Logger.LogDebug($"[MEADOW-MODE] PLAYER_ selector '{series}' (real change {self.selectedPlayerIndex} -> {to}) while meadow ON -> deactivating meadow mode");
+                    if (_uiInstances.TryGetValue(self, out var ui))
+                    {
+                        ui.DeactivateMeadowMode();
+                    }
+                }
+                else
+                {
+                    Plugin.Logger.LogDebug($"[MEADOW-MODE] PLAYER_ selector '{series}' (no change, index {self.selectedPlayerIndex}) while meadow ON -> ignored (spurious re-emission)");
                 }
             }
 
@@ -298,6 +320,7 @@ namespace DMSxMeadow
             {
                 if (_uiInstances.TryGetValue(self, out var ui))
                 {
+                    Plugin.Logger.LogDebug($"[MEADOW-EXIT] leaving Get Fancy meadow={MeadowProfileManager.IsMeadowModeActive} slugcat={self.selectedSlugcat} player={self.selectedPlayerIndex}");
                     if (MeadowProfileManager.IsMeadowModeActive)
                     {
                         ui.ForceDeactivateMeadowMode();
@@ -375,9 +398,10 @@ namespace DMSxMeadow
                 try
                 {
                     if (_uiInstances.TryGetValue(fancyMenu, out var ui))
-                    {
-                        ui.SaveCurrentProfile();
-                    }
+                {
+                    Plugin.Logger.LogDebug($"[MEADOW-SAVE] auto-save triggered by signal '{message}' slugcat={fancyMenu.selectedSlugcat} player={fancyMenu.selectedPlayerIndex}");
+                    ui.SaveCurrentProfile();
+                }
                 }
                 catch (Exception ex)
                 {
@@ -388,12 +412,6 @@ namespace DMSxMeadow
             orig(fancyMenu, sender, message);
         }
 
-        /// <summary>
-        /// H-5: el gallery de DMS (GalleryDialog.cs:59) lista TODAS las SpriteSheets
-        /// registradas, incluidas las skins que otros jugadores nos enviaron (guardadas en
-        /// caché con id renombrado). Se ocultan de la lista global durante el constructor
-        /// (cuando el dialogo copia las hojas a su propia lista) y se reincorporan después.
-        /// </summary>
         private static void GalleryDialog_Ctor_Hook(
             Action<DressMySlugcat.GalleryDialog, string, DressMySlugcat.FancyMenu> orig,
             DressMySlugcat.GalleryDialog self,
@@ -403,6 +421,7 @@ namespace DMSxMeadow
             List<DressMySlugcat.SpriteSheet> hiddenSheets = HideCachedSheetsFromGallery();
             try
             {
+                Plugin.Logger.LogDebug($"[MEADOW-GALLERY] open '{spriteName}' slugcat={owner.selectedSlugcat} player={owner.selectedPlayerIndex} meadow={MeadowProfileManager.IsMeadowModeActive}");
                 orig(self, spriteName, owner);
             }
             catch (Exception ex)
@@ -415,9 +434,31 @@ namespace DMSxMeadow
             }
         }
 
-        /// <summary>Retira de DressMySlugcat.Plugin.SpriteSheets las hojas que viven en la caché
-        /// del mod (dmsxmeadow/dressmyslugcat) y devuelve la lista de lo ocultado para poder
-        /// restaurarlo.</summary>
+        private static void GalleryDialog_Singal_Hook(
+            Action<DressMySlugcat.GalleryDialog, MenuObject, string> orig,
+            DressMySlugcat.GalleryDialog self,
+            MenuObject sender,
+            string message)
+        {
+            orig(self, sender, message);
+
+            if (message != "BACK") return;
+
+            try
+            {
+                var customization = DressMySlugcat.Customization.For(
+                    self.owner.selectedSlugcat,
+                    self.owner.selectedPlayerIndex,
+                    false);
+                string headSheet = customization?.CustomSprite(self.spriteName)?.SpriteSheetID ?? "(none)";
+                Plugin.Logger.LogDebug($"[MEADOW-GALLERY] close '{self.spriteName}' slugcat={self.owner.selectedSlugcat} player={self.owner.selectedPlayerIndex} meadow={MeadowProfileManager.IsMeadowModeActive} selectedSheet={headSheet}");
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.LogError($"Error logging gallery close: {ex.Message}");
+            }
+        }
+
         private static List<DressMySlugcat.SpriteSheet> HideCachedSheetsFromGallery()
         {
             var hiddenSheets = new List<DressMySlugcat.SpriteSheet>();
@@ -443,9 +484,6 @@ namespace DMSxMeadow
             return hiddenSheets;
         }
 
-        /// <summary>Reincorpora a la lista global las hojas ocultadas, evitando duplicados si
-        /// durante el dialogo se relanzó el registro de atlas (ReloadAtlases re-escanea el
-        /// disco y recrea las hojas de caché con los mismos ids).</summary>
         private static void RestoreHiddenSheets(List<DressMySlugcat.SpriteSheet> hiddenSheets)
         {
             try
@@ -516,6 +554,7 @@ namespace DMSxMeadow
 
             if (message == "CUST_DEFAULTS")
             {
+                Plugin.Logger.LogDebug($"[MEADOW-RESET] CUST_DEFAULTS applying defaults to slugcat={slugcat} player={playerNumber} (clearing CustomSprites)");
                 var defaults = DressMySlugcat.SpriteDefinitions.GetSlugcatDefault(slugcat, playerNumber)?.Copy();
                 live.CustomSprites.Clear();
 
@@ -623,6 +662,7 @@ namespace DMSxMeadow
             shutdownHook?.Dispose();
             customizationFor3ArgHook?.Dispose();
             galleryDialogCtorHook?.Dispose();
+            galleryDialogSingalHook?.Dispose();
             _uiInstances.Clear();
             _currentFancyMenu = null;
             _liveMeadowCustomizations.Clear();
