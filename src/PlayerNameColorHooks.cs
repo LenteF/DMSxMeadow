@@ -1,8 +1,10 @@
+using DressMySlugcat;
 using MonoMod.RuntimeDetour;
 using RainMeadow;
 using RainMeadow.UI.Components;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using UnityEngine;
 
@@ -365,6 +367,7 @@ namespace DMSxMeadow
                 self.lighter_color = V < 0.8f ? Color.HSVToRGB(H, S, 0.8f) : nameColor;
                 self.username.color = self.lighter_color;
                 self.playerIcon.icon.color = self.lighter_color;
+                ApplyCustomSlugIconColors(self, customization);
                 self.pingLabel.color = self.lighter_color;
                 self.arrowSprite.color = self.lighter_color;
 
@@ -378,6 +381,43 @@ namespace DMSxMeadow
             {
                 Plugin.Logger.LogError($"OnlinePlayerDisplay ctor hook error: {ex.Message}");
             }
+        }
+
+        private static void ApplyCustomSlugIconColors(OnlinePlayerDisplay self, SlugcatCustomization customization)
+        {
+            List<Color> baseColors = new List<Color>();
+            if (SlugIcon.SlugcatNameToDefaultColors.TryGetValue(self.playerIcon.slugIcon.slugcatName, out var hexList))
+            {
+                baseColors = hexList.Select(hex => RWCustom.Custom.hexToColor(hex ?? "FFFFFF")).ToList();
+            }
+            else
+            {
+                baseColors = new List<Color> { Color.white, RWCustom.Custom.hexToColor("101010"), RWCustom.Custom.hexToColor("E59D52") };
+            }
+
+            List<Color> paletteToSend = new List<Color>();
+
+            paletteToSend.Add(self.lighter_color);
+
+            if (customization.currentColors != null && customization.currentColors.Count > 1)
+            {
+                paletteToSend.Add(customization.currentColors[1]);
+            }
+            else if (baseColors.Count > 1)
+            {
+                paletteToSend.Add(baseColors[1]);
+            }
+
+            if (customization.currentColors != null && customization.currentColors.Count > 2)
+            {
+                paletteToSend.Add(customization.currentColors[2]);
+            }
+            else if (baseColors.Count > 2)
+            {
+                paletteToSend.Add(baseColors[2]);
+            }
+
+            self.playerIcon.slugIcon.ApplyPalette(paletteToSend);
         }
     }
 }
