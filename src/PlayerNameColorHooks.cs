@@ -1,5 +1,6 @@
 using MonoMod.RuntimeDetour;
 using RainMeadow;
+using RainMeadow.UI.Components;
 using System;
 using System.Collections.Generic;
 using System.Reflection;
@@ -363,7 +364,7 @@ namespace DMSxMeadow
                 Color.RGBToHSV(nameColor, out float H, out float S, out float V);
                 self.lighter_color = V < 0.8f ? Color.HSVToRGB(H, S, 0.8f) : nameColor;
                 self.username.color = self.lighter_color;
-                self.slugIcon.color = self.lighter_color;
+                self.playerIcon.icon.color = self.lighter_color;
                 self.pingLabel.color = self.lighter_color;
                 self.arrowSprite.color = self.lighter_color;
 
