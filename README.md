@@ -16,7 +16,7 @@ Instead of relying on local player slots (which leads to skin cloning in online 
 * **Security & Blacklist Validation (`SkinBanManager`):** Receivers cross-check incoming handshakes against `blacklist.txt` and inspect the `ShareSkin` flag prior to initiating any transfer request.
 * **Memory Lifecycle & Cleanup:** Dynamically registered skins reside in runtime memory during active sessions and are completely cleared upon returning to the Main Menu to prevent texture leakage and state overlap.
 * **Dedicated UI Controls & Privacy Indicators:** Adds a local spectator button (`SpectatorPlayerButtonHook`) to easily toggle/ban specific player skins on the fly, alongside a client-side visual indicator (`StoryLobbyShareSkinIndicator`) displaying the local status of the `ShareSkin` setting.
-* **HUD & Nameplate Synchronization:** Keeps player identity and custom color palettes synchronized across Rain Meadow lobbies, nameplates (`PlayerNameColorHooks`), and HUD icons.
+* **Independent Identity Color Parameter:** Introduces a dedicated `identity` color parameter alongside skin and eye colors. This allows players to customize the color of their Nameplate, slugcat HUD icon, chat username, and pipe travel highlights completely independently from their slugcat's body skin color.
 
 ---
 
@@ -39,7 +39,7 @@ Instead of relying on local player slots (which leads to skin cloning in online 
 ### 4. UI Controls & Icon Compatibility Engine
 * **Spectator Skin Ban Button (`SpectatorPlayerButtonHook`):** Injects a dedicated UI button into the spectator interface, allowing users to quickly ban/block the skin rendering of specific players during gameplay.
 * **Local ShareSkin Indicator (`StoryLobbyShareSkinIndicator`):** Renders a local, client-side UI indicator in story lobbies to remind the user whether their `ShareSkin` setting is currently active.
-* **Dual Icon & Palette Engine (`FancyMenuHookHandler` & `PlayerNameColorHooks`):** Updates player nameplates and HUD icons with custom DMSxMeadow color overrides.
+* **Identity & UI Color Engine (`FancyMenuHookHandler` & `PlayerNameColorHooks`):** Hooks into Rain Meadow's UI to apply the custom `identity` color parameter across nameplates, chat tags, pipe travel indicators, and HUD icons without modifying the slugcat's underlying body/skin palette.
 
 ---
 
