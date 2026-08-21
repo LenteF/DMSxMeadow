@@ -1,28 +1,47 @@
 # DMSxMeadow
 
-A **BepInEx code mod** for *Rain World* that resolves the skin-cloning issue between **Dress My Slugcat (DMS)** and **Rain Meadow** by introducing an isolated client-side profile storage and assignment manager.
+A high-performance **BepInEx code mod** for *Rain World* that bridges **Dress My Slugcat (DMS)** cosmetics with **Rain Meadow** multiplayer.
 
+Instead of relying on local player slots (which leads to skin cloning in online lobbies), **DMSxMeadow** implements a full **Asynchronous Custom Skin Transfer Protocol**, local memory caching, safety/validation guards, and dynamic UI hooks for both legacy and revamped Rain Meadow interfaces.
 
-## Overview
+---
 
-The core problem stems from how `DressMySlugcat.Customization.For(Player, bool)` handles player indices in an online environment. Rain Meadow introduces custom network clones that confuse the native `PlayerNumber` allocation, forcing DMS to fallback to local player states (cloning Player 1's skin onto everyone else) or rendering them incorrectly.
+## Key Features & Technical Highlights
 
-**DMSxMeadow** addresses this by decoupling DMS profiles from native local player slots. It introduces an internal database system (`MeadowProfileManager`) that manages, persists, and assigns individual DMS customizations to specific Rain Meadow players without modifying the core DMS installation.
+* **Decoupled Local Profile Management (`MeadowProfileManager`):** Maps DMS profile customizations directly to Rain Meadow Steam/Online IDs rather than local gamepad slots, completely eliminating the skin-cloning issue in multiplayer.
+* **Pre-Export File Validation (`SkinPartGuard`):** Inspects and validates local sprite files, atlas assignments, and skin assets *before* they are packed into Data Transfer Objects, preventing broken or corrupted files from being transmitted over the network.
+* **Handshake Metadata Negotiation:** Session events trigger an initial lightweight handshake containing sender metadata (`SteamID`, `SlugcatName`, `ShareSkin`, `RequiredSpriteSheetId`, and `CustomizationJson`).
+* **Pull-Request Asset Transfer Protocol:** If a recipient player does not possess the sender's skin locally, `SkinTransfer` initiates an authenticated pull request utilizing key verification and a 6-attempt retry mechanic.
+* **On-the-Fly DTO Export & Memory Registration:** When requested, `SkinRegistration.ExportEquippedSkinToDTO` converts validated custom skin assets into network-ready payloads. Upon arrival, the receiver unpacks and caches the skin exclusively in memory.
+* **Security & Blacklist Validation (`SkinBanManager`):** Receivers cross-check incoming handshakes against `blacklist.txt` and inspect the `ShareSkin` flag prior to initiating any transfer request.
+* **Memory Lifecycle & Cleanup:** Dynamically registered skins reside in runtime memory during active sessions and are completely cleared upon returning to the Main Menu to prevent texture leakage and state overlap.
+* **Dedicated UI Controls & Privacy Indicators:** Adds a local spectator button (`SpectatorPlayerButtonHook`) to easily toggle/ban specific player skins on the fly, alongside a client-side visual indicator (`StoryLobbyShareSkinIndicator`) displaying the local status of the `ShareSkin` setting.
+* **HUD & Nameplate Synchronization:** Keeps player identity and custom color palettes synchronized across Rain Meadow lobbies, nameplates (`PlayerNameColorHooks`), and HUD icons.
+
+---
 
 ## 🛠️ Technical Architecture
 
-### 1. Persistent Profile Manager (`MeadowProfileManager`)
-The core of the mod relies on a binary-serialized persistent database (`meadowcustom.dat`) and an assignment mapping file (`dmsxmeadow.txt`).
+### 1. Persistent Profile & Customization Mapping (`MeadowProfileManager`)
+* **Offset Mapping:** Isolates custom Meadow profiles from local game options using a fixed offset (`PROFILE_OFFSET = 4`), storing persistence mappings in `meadowcustom.dat` and `dmsxmeadow.txt`.
+* **Runtime Interception:** Detours `DressMySlugcat.Customization.For(Player, bool)`, resolving the `abstractCreature` back to its network owner ID. Forces `PlayerNumber = 0` on returning instances to prevent gamepad polling crashes.
 
-* **Internal Offsets & Slot Ranges:** The system uses a fixed offset (`PROFILE_OFFSET = 4`) to isolate custom Meadow profiles from local game options, ensuring profile mappings remain consistent across sessions.
-* **Database & Profile Data:** Customizations are wrapped inside `MeadowProfileData` containers within a central `MedowDatabase` dictionary, tracking updating timestamps, profile numbers, and visual metadata.
+### 2. Validation & Security (`SkinPartGuard` & `SkinBanManager`)
+* **Asset Sanitization (`SkinPartGuard`):** Acts as a pre-export filter that verifies sprite elements, textures, and atlas integrity prior to serializing skins for network delivery.
+* **Blacklist Filtering (`SkinBanManager`):** Parses `blacklist.txt` on startup. If a sender's Steam ID or skin name is flagged, the handshake is rejected and rendering falls back safely to default Slugcat graphics.
 
-### 2. Execution & Detour Flow
-1. **Hook Injection:** Intercepts `DressMySlugcat.Customization.For(Player, bool)` using a `MonoMod` runtime detour.
-2. **Entity Validation:** Queries `RainMeadow.OnlinePhysicalObject.map` using the player's `abstractCreature` reference to verify if the entity belongs to any client (`owner != null`).
-3. **Database Lookups:** Retrieves the player's Steam ID (`owner.id.ToString()`) and queries `MeadowProfileManager` for its corresponding internal profile slot via `dmsxmeadow.txt`.
-4. **Data Redirection:** If ssigned, returns the specific `Customization` stored in `MeadowProfileManager.Database.Profiles`. Forces `PlayerNumber = 0` on the returning instance to bypass local gamepad polling, preventing `NullReferenceException` crashes during realization.
-5. **Fallback:** Unmatched or unassigned clients are safely delegated back to the original method (`orig`).
+### 3. Handshake & Pull-Request Pipeline
+* **Handshake Phase:** `SkinSerializer` builds and transmits initial metadata parameters.
+* **Verification:** The receiver checks `blacklist.txt`, `ShareSkin` status, and local DMS disk/memory registration.
+* **Pull Request:** If missing, `SkinTransfer` manages a key-authenticated request loop (up to 6 max attempts) back to the sender.
+* **Export & Memory Storage:** The sender validates local assets via `SkinPartGuard`, exports them with `ExportEquippedSkinToDTO`, and transmits the DTO. The receiver unpacks the payload directly into volatile session memory.
+
+### 4. UI Controls & Icon Compatibility Engine
+* **Spectator Skin Ban Button (`SpectatorPlayerButtonHook`):** Injects a dedicated UI button into the spectator interface, allowing users to quickly ban/block the skin rendering of specific players during gameplay.
+* **Local ShareSkin Indicator (`StoryLobbyShareSkinIndicator`):** Renders a local, client-side UI indicator in story lobbies to remind the user whether their `ShareSkin` setting is currently active.
+* **Dual Icon & Palette Engine (`FancyMenuHookHandler` & `PlayerNameColorHooks`):** Updates player nameplates and HUD icons with custom DMSxMeadow color overrides.
+
+---
 
 ## ⚙️ Compilation Notes
 Target framework: **.NET Framework 4.8**
@@ -35,6 +54,7 @@ Dependencies required for compilation:
 * `Mono.Cecil.dll`
 * `MonoMod.RuntimeDetour.dll`
 * `MonoMod.Utils.dll`
+* `Newtonsoft.json.dll`
 * `PUBLIC-Assembly-CSharp.dll`
 * `RainMeadow.dll`
 * `UnityEngine.dll`
