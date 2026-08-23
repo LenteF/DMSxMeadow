@@ -1,12 +1,12 @@
-﻿using System;
+﻿using DressMySlugcat;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
-using DressMySlugcat;
-using DressMySlugcat.Hooks;
-using Newtonsoft.Json.Linq;
 using UnityEngine;
 
 namespace DMSxMeadow
@@ -714,36 +714,33 @@ namespace DMSxMeadow
             foreach (string skinDir in Directory.GetDirectories(dmsPath, "*", SearchOption.AllDirectories))
             {
                 string jsonPath = Path.Combine(skinDir, "metadata.json");
-                if (File.Exists(jsonPath))
-                {
-                    try
-                    {
-                        string jsonText = File.ReadAllText(jsonPath);
-                        if (jsonText.Contains($"\"id\": \"{skinId}\"") || jsonText.Contains($"\"id\":\"{skinId}\""))
-                        {
-                            Plugin.Logger.LogDebug($"🎯 Skin '{skinId}' encontrada con éxito en: {skinDir}");
-                            return skinDir;
-                        }
+                if (!File.Exists(jsonPath)) continue;
 
-                        string folderName = Path.GetFileName(skinDir);
-                        if (skinId.EndsWith(folderName, StringComparison.OrdinalIgnoreCase) ||
-                            skinId.Contains(folderName) ||
-                            jsonText.IndexOf(folderName, StringComparison.OrdinalIgnoreCase) >= 0)
+                try
+                {
+                    string jsonText = File.ReadAllText(jsonPath);
+
+                    foreach (string line in jsonText.Split('\n'))
+                    {
+                        if (line.Contains("\"id\""))
                         {
-                            foreach (string part in skinId.Split('.', '_', ' '))
+                            string[] parts = line.Split(':');
+                            if (parts.Length >= 2)
                             {
-                                if (part.Length > 2 && jsonText.Contains($"\"{part}\""))
+                                string extractedId = parts[1].Trim('"', ' ', ',', '\r', '\n', '\t');
+
+                                if (string.Equals(extractedId, skinId, StringComparison.OrdinalIgnoreCase))
                                 {
-                                    Plugin.Logger.LogDebug($"🎯 Skin '{skinId}' encontrada (Coincidencia Parcial: '{part}') en: {skinDir}");
+                                    Plugin.Logger.LogDebug($"🎯 Skin '{skinId}' encontrada con éxito en: {skinDir}");
                                     return skinDir;
                                 }
                             }
                         }
                     }
-                    catch
-                    {
-
-                    }
+                }
+                catch (Exception ex)
+                {
+                    Plugin.Logger.LogDebug($"Error al leer metadata.json en {skinDir}: {ex.Message}");
                 }
             }
             return null;

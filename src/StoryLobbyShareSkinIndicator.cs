@@ -1213,7 +1213,10 @@ private const float HeadSizeMultiplier = 1f;
                         var rep = def.SlugcatSpecificReplacements?.FirstOrDefault(r =>
                             r.GenericName == genericElementName &&
                             string.Equals(r.Slugcat, slugcat, StringComparison.OrdinalIgnoreCase));
-                        if (rep != null && !string.IsNullOrEmpty(rep.SpecificName)) return rep.SpecificName;
+                        if (rep != null && !string.IsNullOrEmpty(rep.SpecificName))
+                        {
+                            return rep.SpecificName;
+                        }
                     }
                 }
                 catch (Exception) { }
@@ -1242,13 +1245,14 @@ private const float HeadSizeMultiplier = 1f;
 
                     if (sheet != null
                         && !string.Equals(sheet.ID, SpriteSheet.DefaultName, StringComparison.Ordinal)
+                        && sheet.Elements != null
                         && sheet.Elements.TryGetValue(elementName, out element))
                     {
                         fromSkinSheet = true;
                     }
                     else
                     {
-                        element = Futile.atlasManager.GetElementWithName(GetSpecificPartElementName(slugcat, elementName));
+                        element = Futile.atlasManager?.GetElementWithName(GetSpecificPartElementName(slugcat, elementName));
                     }
 
                     if (customSprite != null && customSprite.Color != default && customSprite.Color.a != 0)
