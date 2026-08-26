@@ -18,6 +18,26 @@ namespace DMSxMeadow
         public static Plugin Instance;
         public static new ManualLogSource Logger;
 
+        // Localization: resolves a dmsxm_ key through the game's InGameTranslator
+        // (mod files: text/text_eng/strings.txt, text/text_spa/strings.txt).
+        // Falls back to the English literal if the key is missing or the game
+        // translator is not ready yet.
+        public static string Tr(string key, string fallback)
+        {
+            try
+            {
+                var rainWorld = RWCustom.Custom.rainWorld;
+                var translator = rainWorld != null ? rainWorld.inGameTranslator : null;
+                string res = translator != null ? translator.Translate(key) : null;
+                if (string.IsNullOrEmpty(res) || res == key || res == "!NO TRANSLATION!") return fallback;
+                return res;
+            }
+            catch (Exception)
+            {
+                return fallback;
+            }
+        }
+
         private Hook customizationHook;
         private Hook handleJoinHook;
         private Hook handleDisconnectHook;

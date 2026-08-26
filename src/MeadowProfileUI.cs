@@ -129,7 +129,7 @@ namespace DMSxMeadow
                 _profileLabel = new MenuLabel(
                     _fancyMenu,
                     _fancyMenu.pages[0],
-                    "Profile:",
+                    Plugin.Tr("dmsxm_profile_label", "Profile:"),
                     new Vector2(baseStartX + sectionOffsetX + 3f, baseYPos + 35f + yOffset + 35f + sectionOffsetY),
                     new Vector2(60f, 20f),
                     false
@@ -156,7 +156,7 @@ namespace DMSxMeadow
                 _profileSetButton = new SimpleButton(
                     _fancyMenu,
                     _fancyMenu.pages[0],
-                    "SET",
+                    Plugin.Tr("dmsxm_set_btn", "SET"),
                     "PROFILE_SET",
                     new Vector2(baseStartX + 151f + sectionOffsetX, baseYPos + 35f + yOffset + 35f + sectionOffsetY),
                     new Vector2(40f, 30f)
@@ -171,7 +171,7 @@ namespace DMSxMeadow
                 _steamLabel = new MenuLabel(
                     _fancyMenu,
                     _fancyMenu.pages[0],
-                    "Player ID:",
+                    Plugin.Tr("dmsxm_playerid_label", "Player ID:"),
                     new Vector2(baseStartX + playerIdOffsetX + sectionOffsetX + 3f, baseYPos + 35f + yOffset + 35f + sectionOffsetY),
                     new Vector2(90f, 20f),
                     false
@@ -263,7 +263,7 @@ namespace DMSxMeadow
         {
             if (!MeadowProfileManager.IsMeadowModeActive)
             {
-                _statusLabel.text = "Meadow mode is OFF";
+                _statusLabel.text = Plugin.Tr("dmsxm_status_meadow_off", "Meadow mode is OFF");
                 return;
             }
 
@@ -271,19 +271,19 @@ namespace DMSxMeadow
 
             if (string.IsNullOrEmpty(input) || !int.TryParse(input, out int profileNumber))
             {
-                _statusLabel.text = "Invalid profile number";
+                _statusLabel.text = Plugin.Tr("dmsxm_status_invalid", "Invalid profile number");
                 return;
             }
 
             if (profileNumber < 1 || profileNumber > 99)
             {
-                _statusLabel.text = "Profile must be 1-99";
+                _statusLabel.text = Plugin.Tr("dmsxm_status_range", "Profile must be 1-99");
                 return;
             }
 
             if (profileNumber == MeadowProfileManager.CurrentProfileNumber)
             {
-                _statusLabel.text = $"Already on profile {profileNumber}";
+                _statusLabel.text = Plugin.Tr("dmsxm_status_already", "Already on profile <num>").Replace("<num>", profileNumber.ToString());
                 return;
             }
 
@@ -475,13 +475,13 @@ namespace DMSxMeadow
 
                         if (!string.IsNullOrEmpty(cleanValue))
                         {
-                            _statusLabel.text = "Player ID saved";
+                            _statusLabel.text = Plugin.Tr("dmsxm_status_saved", "Player ID saved");
                             SaveCurrentProfile();
                         }
                         else
                         {
                             MeadowProfileManager.DeleteProfile(MeadowProfileManager.CurrentProfileNumber);
-                            _statusLabel.text = "Profile deleted";
+                            _statusLabel.text = Plugin.Tr("dmsxm_status_deleted", "Profile deleted");
                         }
                     }
 
