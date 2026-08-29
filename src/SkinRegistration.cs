@@ -729,7 +729,7 @@ namespace DMSxMeadow
                             {
                                 string extractedId = parts[1].Trim('"', ' ', ',', '\r', '\n', '\t');
 
-                                if (string.Equals(extractedId, skinId, StringComparison.OrdinalIgnoreCase))
+                                if (string.Equals(extractedId, skinId, StringComparison.Ordinal))
                                 {
                                     Plugin.Logger.LogDebug($"🎯 Skin '{skinId}' encontrada con éxito en: {skinDir}");
                                     return skinDir;
