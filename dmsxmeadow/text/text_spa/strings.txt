@@ -1,0 +1,37 @@
+0// DMSxMeadow - cadenas en español
+// Interfaz propia del mod (Remix OI, sección MEADOW del Get Fancy, overlay de espectador, indicador de ShareSkin).
+// La entrada "Identity" es la sección de color de nombre que aporta PlayerNameColorHooks
+// y que Rain Meadow renderiza vía menu.Translate (ColorSlugcatBodyButtons).
+dmsxm_tab_online|En línea
+dmsxm_tab_local|Local
+dmsxm_title_online|OPCIONES ONLINE
+dmsxm_title_profiles|GESTOR DE PERFILES
+dmsxm_title_banned|SKINS BANEADAS
+dmsxm_share_label|Comparte tu skin
+dmsxm_friends_label|Solo skins de amigos de Steam
+dmsxm_mode_id|ID del jugador
+dmsxm_mode_name|Nombre
+dmsxm_mode_profile|Perfil #
+dmsxm_delete|Borrar
+dmsxm_row_profile|Perfil <num>  <id>
+dmsxm_row_orphan|Perfil <num>  [huérfano]
+dmsxm_profile_label|Perfil:
+dmsxm_set_btn|OK
+dmsxm_playerid_label|ID jugador:
+dmsxm_status_meadow_off|El modo Meadow está apagado
+dmsxm_status_invalid|Número de perfil no válido
+dmsxm_status_range|El perfil debe ser 1-99
+dmsxm_status_already|Ya estás en el perfil <num>
+dmsxm_status_saved|ID de jugador guardado
+dmsxm_status_deleted|Perfil borrado
+dmsxm_ban_desc|Banear la skin de <name> (local y permanente)
+dmsxm_unban_desc|Desbanear la skin de <name> (local y permanente)
+Identity|Identidad
+// Tooltip del cuadrado ShareSkin junto a la cabeza en el lobby (StoryLobbyShareSkinIndicator).
+Other players will be able to see your current skin|Los demás jugadores podrán ver tu skin actual
+ShareSkin is off: other players will not see your skin|ShareSkin está desactivado: los demás jugadores no verán tu skin
+// Tooltips del OI: la clave es la frase inglesa exacta (el Remix las traduce automáticamente).
+Allow other players to request the skins you have equipped. OFF by default: your skins never leave your machine.|Permite que otros jugadores pidan la skin que llevas puesta. Desactivado por defecto: tus skins nunca salen de tu máquina.
+Only download skins from players on your Steam friends list. ON: others (host or client) are never downloaded and appear with the default skin.|Descarga skins solo de jugadores de tu lista de amigos de Steam. Activado: los demás (anfitrión o cliente) nunca se descargan y se ven con la skin por defecto.
+Search banned players|Buscar jugadores baneados
+Search query|Texto de búsqueda

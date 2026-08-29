@@ -105,9 +105,16 @@ namespace DMSxMeadow
         {
             string cleanName = string.IsNullOrWhiteSpace(displayName) ? "" : displayName.Trim();
             string target = cleanName.Length > 0 ? $"{cleanName} ({steamId})" : steamId;
+<<<<<<< Updated upstream
             return banned
                 ? $"Unban the skin of {target} (local, permanent)"
                 : $"Ban the skin of {target} (local, permanent)";
+=======
+            string template = banned
+                ? Plugin.Tr("dmsxm_unban_desc", "Unban the skin of <name> (local, permanent)")
+                : Plugin.Tr("dmsxm_ban_desc", "Ban the skin of <name> (local, permanent)");
+            return template.Replace("<name>", target);
+>>>>>>> Stashed changes
         }
 
         public static void Dispose()

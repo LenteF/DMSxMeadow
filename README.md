@@ -9,6 +9,7 @@ Instead of relying on local player slots (which leads to skin cloning in online 
 ## Key Features & Technical Highlights
 
 * **Decoupled Local Profile Management (`MeadowProfileManager`):** Maps DMS profile customizations directly to Rain Meadow Steam/Online IDs rather than local gamepad slots, completely eliminating the skin-cloning issue in multiplayer.
+* **Strict Profile Resolution & Override Priority (`Customization_For_Hook`):** Establishes a strict priority hierarchy when assigning skins to realized players: manual local Meadow profiles (`MeadowProfileManager`) always take precedence—overriding both network-shared skins (`SkinSerializer`) and default DMS setups—for both self-assignments and remote player assignments.
 * **Pre-Export File Validation (`SkinPartGuard`):** Inspects and validates local sprite files, atlas assignments, and skin assets *before* they are packed into Data Transfer Objects, preventing broken or corrupted files from being transmitted over the network.
 * **Handshake Metadata Negotiation:** Session events trigger an initial lightweight handshake containing sender metadata (`SteamID`, `SlugcatName`, `ShareSkin`, `RequiredSpriteSheetId`, and `CustomizationJson`).
 * **Pull-Request Asset Transfer Protocol:** If a recipient player does not possess the sender's skin locally, `SkinTransfer` initiates an authenticated pull request utilizing key verification and a 6-attempt retry mechanic.
@@ -24,7 +25,11 @@ Instead of relying on local player slots (which leads to skin cloning in online 
 
 ### 1. Persistent Profile & Customization Mapping (`MeadowProfileManager`)
 * **Offset Mapping:** Isolates custom Meadow profiles from local game options using a fixed offset (`PROFILE_OFFSET = 4`), storing persistence mappings in `meadowcustom.dat` and `dmsxmeadow.txt`.
-* **Runtime Interception:** Detours `DressMySlugcat.Customization.For(Player, bool)`, resolving the `abstractCreature` back to its network owner ID. Forces `PlayerNumber = 0` on returning instances to prevent gamepad polling crashes.
+* **Runtime Interception (`Customization_For_Hook`):** Detours `DressMySlugcat.Customization.For(Player, bool)`, resolving the player's `abstractCreature` back to its network owner's Steam ID.
+* **Resolution Priority Hierarchy:** When determining a player's active skin, `Customization_For_Hook` evaluates sources in strict order:
+  1. **Manual Meadow Profile Override:** Queries `MeadowProfileManager.GetCustomizationBySteamID`. Matches here take absolute priority for both local self-assignments and targeted remote player overrides.
+  2. **Network-Shared Skin Payload:** If no manual override exists, queries `SkinSerializer.GetReceivedCustomization` for dynamically transferred DTO skins.
+  3. **Local/Clean Fallback:** If neither source returns a valid profile (or if the player is locally banned), applies a clean default `DressMySlugcat.Customization` instance.
 
 ### 2. Validation & Security (`SkinPartGuard` & `SkinBanManager`)
 * **Asset Sanitization (`SkinPartGuard`):** Acts as a pre-export filter that verifies sprite elements, textures, and atlas integrity prior to serializing skins for network delivery.

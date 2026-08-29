@@ -150,8 +150,13 @@ namespace DMSxMeadow
             // ============================================================
             // TABS: "Online" and "Local"
             // ============================================================
+<<<<<<< Updated upstream
             _onlineTab = new OpTab(this, ONLINE_TAB_NAME);
             _profilesTab = new OpTab(this, LOCAL_TAB_NAME);
+=======
+            _onlineTab = new OpTab(this, Plugin.Tr("dmsxm_tab_online", ONLINE_TAB_NAME));
+            _profilesTab = new OpTab(this, Plugin.Tr("dmsxm_tab_local", LOCAL_TAB_NAME));
+>>>>>>> Stashed changes
             Tabs = new[] { _onlineTab, _profilesTab };
 
             float row1Y = 515f;
@@ -176,7 +181,11 @@ namespace DMSxMeadow
             var onlineTitle = new OpLabel(
                 new Vector2(20f + searchRowOffsetX + 124f, titleY),
                 new Vector2(350f, 20f),
+<<<<<<< Updated upstream
                 "ONLINE OPTIONS",
+=======
+                Plugin.Tr("dmsxm_title_online", "ONLINE OPTIONS"),
+>>>>>>> Stashed changes
                 FLabelAlignment.Center,
                 false
             );
@@ -201,7 +210,11 @@ namespace DMSxMeadow
             var shareDescription = new OpLabel(
                 new Vector2(52f, 490f),
                 new Vector2(520f, 60f),
+<<<<<<< Updated upstream
                 "Share Your Skin",
+=======
+                Plugin.Tr("dmsxm_share_label", "Share Your Skin"),
+>>>>>>> Stashed changes
                 FLabelAlignment.Left,
                 false
             );
@@ -233,7 +246,11 @@ namespace DMSxMeadow
             var friendsOnlyDescription = new OpLabel(
                 new Vector2(332f, 490f),
                 new Vector2(300f, 60f),
+<<<<<<< Updated upstream
                 "Only Steam Friends Skins",
+=======
+                Plugin.Tr("dmsxm_friends_label", "Only Steam Friends Skins"),
+>>>>>>> Stashed changes
                 FLabelAlignment.Left,
                 false
             );
@@ -254,7 +271,11 @@ namespace DMSxMeadow
             var bannedTitle = new OpLabel(
                 new Vector2(20f + searchRowOffsetX + 124f, bannedTitleY),
                 new Vector2(350f, 20f),
+<<<<<<< Updated upstream
                 "BANNED SKIN LIST",
+=======
+                Plugin.Tr("dmsxm_title_banned", "BANNED SKIN LIST"),
+>>>>>>> Stashed changes
                 FLabelAlignment.Center,
                 false
             );
@@ -267,12 +288,20 @@ namespace DMSxMeadow
             _bannedModeButton = new OpSimpleButton(
                 new Vector2(230f + searchRowOffsetX, bannedRow1Y),
                 new Vector2(140f, 24f),
+<<<<<<< Updated upstream
                 _searchBannedBySteamId ? "Player ID" : "Name"
+=======
+                _searchBannedBySteamId ? Plugin.Tr("dmsxm_mode_id", "Player ID") : Plugin.Tr("dmsxm_mode_name", "Name")
+>>>>>>> Stashed changes
             );
             _bannedModeButton.OnClick += (_) =>
             {
                 _searchBannedBySteamId = !_searchBannedBySteamId;
+<<<<<<< Updated upstream
                 _bannedModeButton.text = _searchBannedBySteamId ? "Player ID" : "Name";
+=======
+                _bannedModeButton.text = _searchBannedBySteamId ? Plugin.Tr("dmsxm_mode_id", "Player ID") : Plugin.Tr("dmsxm_mode_name", "Name");
+>>>>>>> Stashed changes
                 RefreshBannedList();
             };
             _onlineTab.AddItems(_bannedModeButton);
@@ -309,7 +338,11 @@ namespace DMSxMeadow
             var titleLabel = new OpLabel(
                 new Vector2(20f + searchRowOffsetX + 124f, titleY),
                 new Vector2(350f, 20f),
+<<<<<<< Updated upstream
                 "PROFILE MANAGER",
+=======
+                Plugin.Tr("dmsxm_title_profiles", "PROFILE MANAGER"),
+>>>>>>> Stashed changes
                 FLabelAlignment.Center,
                 false
             );
@@ -322,12 +355,20 @@ namespace DMSxMeadow
             _modeButton = new OpSimpleButton(
                 new Vector2(230f + searchRowOffsetX, row1Y),
                 new Vector2(140f, 24f),
+<<<<<<< Updated upstream
                 _searchBySteamId ? "Player ID" : "Profile #"
+=======
+                _searchBySteamId ? Plugin.Tr("dmsxm_mode_id", "Player ID") : Plugin.Tr("dmsxm_mode_profile", "Profile #")
+>>>>>>> Stashed changes
             );
             _modeButton.OnClick += (_) =>
             {
                 _searchBySteamId = !_searchBySteamId;
+<<<<<<< Updated upstream
                 _modeButton.text = _searchBySteamId ? "Player ID" : "Profile #";
+=======
+                _modeButton.text = _searchBySteamId ? Plugin.Tr("dmsxm_mode_id", "Player ID") : Plugin.Tr("dmsxm_mode_profile", "Profile #");
+>>>>>>> Stashed changes
                 RefreshList();
             };
             _profilesTab.AddItems(_modeButton);
@@ -438,8 +479,13 @@ namespace DMSxMeadow
                 foreach (var (profileNum, steamId, isOrphan) in matchingProfiles)
                 {
                     string display = isOrphan
+<<<<<<< Updated upstream
                         ? $"Profile {profileNum}  [orphan]"
                         : $"Profile {profileNum}  {steamId}";
+=======
+                        ? Plugin.Tr("dmsxm_row_orphan", "Profile <num>  [orphan]").Replace("<num>", profileNum.ToString())
+                        : Plugin.Tr("dmsxm_row_profile", "Profile <num>  <id>").Replace("<num>", profileNum.ToString()).Replace("<id>", steamId);
+>>>>>>> Stashed changes
 
                     var label = new OpLabel(10f, y, display, false);
                     if (isOrphan)
@@ -450,7 +496,11 @@ namespace DMSxMeadow
                     var deleteBtn = new OpSimpleButton(
                         new Vector2(350f, y - 3f),
                         new Vector2(70f, 22f),
+<<<<<<< Updated upstream
                         "Delete"
+=======
+                        Plugin.Tr("dmsxm_delete", "Delete")
+>>>>>>> Stashed changes
                     );
 
                     int capturedNum = profileNum;
@@ -547,7 +597,11 @@ namespace DMSxMeadow
                     var deleteBtn = new OpSimpleButton(
                         new Vector2(350f, y - 3f),
                         new Vector2(70f, 22f),
+<<<<<<< Updated upstream
                         "Delete"
+=======
+                        Plugin.Tr("dmsxm_delete", "Delete")
+>>>>>>> Stashed changes
                     );
 
                     string capturedId = id;
