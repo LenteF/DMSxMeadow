@@ -295,17 +295,10 @@ namespace DMSxMeadow
 
             if (series.StartsWith("PLAYER_") && MeadowProfileManager.IsMeadowModeActive)
             {
-                if (self.selectedPlayerIndex != to)
+                Plugin.Logger.LogDebug($"[MEADOW-MODE] PLAYER_ selector '{series}' (index {to}) while meadow ON -> deactivating meadow mode to return to DMS profile");
+                if (_uiInstances.TryGetValue(self, out var ui))
                 {
-                    Plugin.Logger.LogDebug($"[MEADOW-MODE] PLAYER_ selector '{series}' (real change {self.selectedPlayerIndex} -> {to}) while meadow ON -> deactivating meadow mode");
-                    if (_uiInstances.TryGetValue(self, out var ui))
-                    {
-                        ui.DeactivateMeadowMode();
-                    }
-                }
-                else
-                {
-                    Plugin.Logger.LogDebug($"[MEADOW-MODE] PLAYER_ selector '{series}' (no change, index {self.selectedPlayerIndex}) while meadow ON -> ignored (spurious re-emission)");
+                    ui.DeactivateMeadowMode();
                 }
             }
 
