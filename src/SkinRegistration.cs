@@ -255,7 +255,7 @@ namespace DMSxMeadow
             int current = (int)_nextAtlasIndexField.GetValue(null);
             int next = current + 1;
             _nextAtlasIndexField.SetValue(null, next);
-            return next;
+            return current;
         }
 
         internal static void AddAtlasToManager(FAtlas atlas)
