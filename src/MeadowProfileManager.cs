@@ -26,13 +26,13 @@ namespace DMSxMeadow
     public static class MeadowProfileManager
     {
         // ============================================================
-        // ARCHIVO 1: Datos de ropa de perfiles extendidos (meadowcustom.dat)
+        // ARCHIVO 1: DATOS DE ROPA
         // ============================================================
         private static string RootPath => $"{Application.persistentDataPath}{Path.DirectorySeparatorChar}dressmyslugcat{Path.DirectorySeparatorChar}";
         private static string SaveFile => RootPath + "meadowcustom.dat";
 
         // ============================================================
-        // ARCHIVO 2: Asignaciones PlayerID -> Perfil (dmsxmeadow.txt)
+        // ARCHIVO 2: ASIGNACIONES
         // ============================================================
         private static string AssignmentsRootPath => $"{Application.persistentDataPath}{Path.DirectorySeparatorChar}dmsxmeadow{Path.DirectorySeparatorChar}";
         private static string AssignmentsFile => AssignmentsRootPath + "dmsxmeadow.txt";
@@ -155,10 +155,6 @@ namespace DMSxMeadow
                 }
 
                 var lines = new List<string>();
-                lines.Add("# PlayerID:ProfileNumber");
-                lines.Add("# Format: STEAM_0:1:12345678:5");
-                lines.Add("# or 76561198000000000:6");
-                lines.Add("");
 
                 foreach (var kvp in _assignments)
                 {
@@ -236,6 +232,8 @@ namespace DMSxMeadow
             profile.CustomizationsBySlugcat[slugcatName] = customization.Copy();
             profile.LastUpdated = DateTime.Now;
 
+            string headSheet = customization.CustomSprites?.FirstOrDefault(s => s.Sprite == "HEAD")?.SpriteSheetID ?? "(none)";
+
             string steamId = GetSteamID(CurrentProfileNumber);
             if (!string.IsNullOrEmpty(steamId))
             {
@@ -243,6 +241,11 @@ namespace DMSxMeadow
                 Database.Profiles[internalNumber] = profile;
                 _unsavedProfiles.Remove(CurrentProfileNumber);
                 Save();
+                Plugin.Logger.LogDebug($"[MEADOW-PERSIST] profile {CurrentProfileNumber} slugcat={slugcatName} head={headSheet} sprites={customization.CustomSprites?.Count ?? 0} steamId={steamId} -> DISK");
+            }
+            else
+            {
+                Plugin.Logger.LogDebug($"[MEADOW-PERSIST] profile {CurrentProfileNumber} slugcat={slugcatName} head={headSheet} sprites={customization.CustomSprites?.Count ?? 0} -> MEMORY ONLY (no steamId assigned)");
             }
         }
 
@@ -427,38 +430,6 @@ namespace DMSxMeadow
             {
                 Plugin.Logger.LogError($"Error removing assignment for profile {displayNumber}: {ex.Message}");
             }
-        }
-
-        public static bool ProfileExists(int displayNumber)
-        {
-            try
-            {
-                int internalNum = GetInternalProfile(displayNumber);
-                if (Database.Profiles != null && Database.Profiles.ContainsKey(internalNum))
-                {
-                    return true;
-                }
-
-                if (_unsavedProfiles.ContainsKey(displayNumber))
-                {
-                    return true;
-                }
-
-                LoadAssignments();
-                foreach (var kvp in _assignments)
-                {
-                    if (kvp.Value == displayNumber)
-                    {
-                        return true;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Plugin.Logger.LogError($"Error checking profile existence: {ex.Message}");
-            }
-
-            return false;
         }
 
         public static int DeleteOrphanProfiles()

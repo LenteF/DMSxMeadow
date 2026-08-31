@@ -2,6 +2,7 @@ using Menu;
 using Menu.Remix;
 using Menu.Remix.MixedUI;
 using System;
+using System.Linq;
 using UnityEngine;
 
 namespace DMSxMeadow
@@ -22,8 +23,6 @@ namespace DMSxMeadow
 
         private bool _profileFieldWasHeld = false;
         private bool _steamFieldWasHeld = false;
-        private string _lastConfirmedSteamId = "";
-        private string _lastConfirmedProfileNumber = "";
         private string _pendingProfileInput = "1";
         private string _lastKnownSlugcat = "";
 
@@ -74,15 +73,11 @@ namespace DMSxMeadow
                 // ============================================================
                 // POSICIONAMIENTO RESPONSIVO A RESOLUCIÓN
                 // ============================================================
-                // textBoxBorder.pos.x YA incluye leftAnchor.
-                // NO restamos leftAnchor para que el desplazamiento se mantenga.
                 // ============================================================
                 float baseStartX = textBoxBorder.pos.x + (65f * playerCount) + 10f;
 
                 // ============================================================
-                // LIMITACIÓN DE SEGURIDAD: evitar invadir el área de los botones
-                // de control de DMS (reset/defaults/copy/paste) que se anclan
-                // al borde derecho de la caja en resoluciones angostas.
+                // LIMITACIÓN DE SEGURIDAD
                 // ============================================================
                 float maxSafeX = textBoxBorder.pos.x + textBoxBorder.size.x - 260f;
                 baseStartX = Mathf.Min(baseStartX, maxSafeX);
@@ -94,8 +89,7 @@ namespace DMSxMeadow
                 baseStartX += positionOffsetX;
 
                 // ============================================================
-                // FILA PROPIA: Y = -80f (debajo de Player buttons, lejos de
-                // los botones de control en Y = +20f)
+                // FILA PROPIA: Y = -80f
                 // ============================================================
                 float baseYPos = textBoxBorder.pos.y - 75f;
 
@@ -135,7 +129,7 @@ namespace DMSxMeadow
                 _profileLabel = new MenuLabel(
                     _fancyMenu,
                     _fancyMenu.pages[0],
-                    "Profile:",
+                    Plugin.Tr("dmsxm_profile_label", "Profile:"),
                     new Vector2(baseStartX + sectionOffsetX + 3f, baseYPos + 35f + yOffset + 35f + sectionOffsetY),
                     new Vector2(60f, 20f),
                     false
@@ -162,7 +156,7 @@ namespace DMSxMeadow
                 _profileSetButton = new SimpleButton(
                     _fancyMenu,
                     _fancyMenu.pages[0],
-                    "SET",
+                    Plugin.Tr("dmsxm_set_btn", "SET"),
                     "PROFILE_SET",
                     new Vector2(baseStartX + 151f + sectionOffsetX, baseYPos + 35f + yOffset + 35f + sectionOffsetY),
                     new Vector2(40f, 30f)
@@ -177,7 +171,7 @@ namespace DMSxMeadow
                 _steamLabel = new MenuLabel(
                     _fancyMenu,
                     _fancyMenu.pages[0],
-                    "Player ID:",
+                    Plugin.Tr("dmsxm_playerid_label", "Player ID:"),
                     new Vector2(baseStartX + playerIdOffsetX + sectionOffsetX + 3f, baseYPos + 35f + yOffset + 35f + sectionOffsetY),
                     new Vector2(90f, 20f),
                     false
@@ -259,6 +253,7 @@ namespace DMSxMeadow
             string currentSlugcat = _fancyMenu.selectedSlugcat;
             if (currentSlugcat != _lastKnownSlugcat)
             {
+                Plugin.Logger.LogDebug($"[MEADOW-LOAD] slugcat change '{_lastKnownSlugcat}' -> '{currentSlugcat}', reloading profile {MeadowProfileManager.CurrentProfileNumber} (unsaved edits may be lost)");
                 _lastKnownSlugcat = currentSlugcat;
                 LoadProfile(MeadowProfileManager.CurrentProfileNumber);
             }
@@ -268,7 +263,7 @@ namespace DMSxMeadow
         {
             if (!MeadowProfileManager.IsMeadowModeActive)
             {
-                _statusLabel.text = "Meadow mode is OFF";
+                _statusLabel.text = Plugin.Tr("dmsxm_status_meadow_off", "Meadow mode is OFF");
                 return;
             }
 
@@ -276,19 +271,19 @@ namespace DMSxMeadow
 
             if (string.IsNullOrEmpty(input) || !int.TryParse(input, out int profileNumber))
             {
-                _statusLabel.text = "Invalid profile number";
+                _statusLabel.text = Plugin.Tr("dmsxm_status_invalid", "Invalid profile number");
                 return;
             }
 
             if (profileNumber < 1 || profileNumber > 99)
             {
-                _statusLabel.text = "Profile must be 1-99";
+                _statusLabel.text = Plugin.Tr("dmsxm_status_range", "Profile must be 1-99");
                 return;
             }
 
             if (profileNumber == MeadowProfileManager.CurrentProfileNumber)
             {
-                _statusLabel.text = $"Already on profile {profileNumber}";
+                _statusLabel.text = Plugin.Tr("dmsxm_status_already", "Already on profile <num>").Replace("<num>", profileNumber.ToString());
                 return;
             }
 
@@ -302,28 +297,43 @@ namespace DMSxMeadow
 
             string steamId = MeadowProfileManager.GetSteamID(profileNumber);
             _steamIdField.value = string.IsNullOrEmpty(steamId) ? "unassigned" : steamId;
-
-            _lastConfirmedSteamId = steamId;
-            _lastConfirmedProfileNumber = profileNumber.ToString();
         }
 
         public void SaveCurrentProfile()
         {
             try
             {
-                if (!MeadowProfileManager.IsMeadowModeActive) return;
+                if (!MeadowProfileManager.IsMeadowModeActive)
+                {
+                    Plugin.Logger.LogDebug($"[MEADOW-SAVE] skip: meadow OFF (slugcat={_fancyMenu.selectedSlugcat}, player={_fancyMenu.selectedPlayerIndex})");
+                    return;
+                }
 
                 var customization = GetLiveCustomization();
                 if (customization != null)
                 {
                     string slugcatName = _fancyMenu.selectedSlugcat;
+                    string headSheet = GetHeadSheetId(customization);
+                    Plugin.Logger.LogDebug($"[MEADOW-SAVE] writing profile {MeadowProfileManager.CurrentProfileNumber} slugcat={slugcatName} player={_fancyMenu.selectedPlayerIndex} head={headSheet} sprites={customization.CustomSprites?.Count ?? 0}");
                     MeadowProfileManager.SaveCurrentProfile(slugcatName, customization);
+                }
+                else
+                {
+                    Plugin.Logger.LogDebug($"[MEADOW-SAVE] live customization is null");
                 }
             }
             catch (Exception ex)
             {
                 Plugin.Logger.LogError($"Error saving profile: {ex.Message}");
+                Plugin.Logger.LogError(ex.StackTrace);
             }
+        }
+
+        private static string GetHeadSheetId(DressMySlugcat.Customization customization)
+        {
+            if (customization?.CustomSprites == null) return "(none)";
+            var head = customization.CustomSprites.FirstOrDefault(s => s.Sprite == "HEAD");
+            return head?.SpriteSheetID ?? "(none)";
         }
 
         private DressMySlugcat.Customization GetLiveCustomization()
@@ -349,6 +359,8 @@ namespace DMSxMeadow
             {
                 string slugcatName = _fancyMenu.selectedSlugcat;
                 var customization = MeadowProfileManager.GetProfileCustomization(displayNumber, slugcatName);
+                string headSheet = customization?.CustomSprites?.FirstOrDefault(s => s.Sprite == "HEAD")?.SpriteSheetID ?? "(none)";
+                Plugin.Logger.LogDebug($"[MEADOW-LOAD] profile {displayNumber} slugcat={slugcatName} found={(customization != null)} head={headSheet} sprites={customization?.CustomSprites?.Count ?? 0}");
                 var live = GetLiveCustomization();
                 if (live == null)
                 {
@@ -460,17 +472,16 @@ namespace DMSxMeadow
                     if (cleanValue != currentSteamId)
                     {
                         MeadowProfileManager.SetSteamID(MeadowProfileManager.CurrentProfileNumber, cleanValue);
-                        _lastConfirmedSteamId = cleanValue;
 
                         if (!string.IsNullOrEmpty(cleanValue))
                         {
-                            _statusLabel.text = "Player ID saved";
+                            _statusLabel.text = Plugin.Tr("dmsxm_status_saved", "Player ID saved");
                             SaveCurrentProfile();
                         }
                         else
                         {
                             MeadowProfileManager.DeleteProfile(MeadowProfileManager.CurrentProfileNumber);
-                            _statusLabel.text = "Profile deleted";
+                            _statusLabel.text = Plugin.Tr("dmsxm_status_deleted", "Profile deleted");
                         }
                     }
 
@@ -528,11 +539,10 @@ namespace DMSxMeadow
             string steamId = MeadowProfileManager.GetSteamID(profileNumber);
             _steamIdField.value = string.IsNullOrEmpty(steamId) ? "unassigned" : steamId;
 
-            _lastConfirmedSteamId = steamId;
-            _lastConfirmedProfileNumber = profileNumber.ToString();
-
             _lastKnownSlugcat = _fancyMenu.selectedSlugcat;
             LoadProfile(profileNumber);
+
+            Plugin.Logger.LogDebug($"[MEADOW-MODE] ACTIVATED (profile {MeadowProfileManager.CurrentProfileNumber}, slugcat={_fancyMenu.selectedSlugcat}, player={_fancyMenu.selectedPlayerIndex})");
 
             RefreshDummyAndControls();
         }
@@ -550,11 +560,11 @@ namespace DMSxMeadow
             _steamIdField.greyedOut = true;
             _profileSetButton.inactive = true;
 
-            _lastConfirmedSteamId = "";
-            _lastConfirmedProfileNumber = "";
             _profileFieldWasHeld = false;
             _steamFieldWasHeld = false;
             _lastKnownSlugcat = "";
+
+            Plugin.Logger.LogDebug($"[MEADOW-MODE] DEACTIVATED (profile {MeadowProfileManager.CurrentProfileNumber}, slugcat={_fancyMenu.selectedSlugcat}, player={_fancyMenu.selectedPlayerIndex})");
 
             MeadowProfileManager.IsMeadowModeActive = false;
             _statusLabel.text = "";
@@ -593,11 +603,11 @@ namespace DMSxMeadow
             _steamIdField.greyedOut = true;
             _profileSetButton.inactive = true;
 
-            _lastConfirmedSteamId = "";
-            _lastConfirmedProfileNumber = "";
             _profileFieldWasHeld = false;
             _steamFieldWasHeld = false;
             _lastKnownSlugcat = "";
+
+            Plugin.Logger.LogDebug($"[MEADOW-MODE] FORCE-DEACTIVATED (profile {MeadowProfileManager.CurrentProfileNumber}, slugcat={_fancyMenu.selectedSlugcat}, player={_fancyMenu.selectedPlayerIndex})");
 
             MeadowProfileManager.IsMeadowModeActive = false;
             _statusLabel.text = "";
@@ -606,7 +616,7 @@ namespace DMSxMeadow
         }
 
         // ============================================================
-        // Manejo de Ctrl+V para pegar desde portapapeles
+        // PEGAR DESDE PORTAPAPELES
         // ============================================================
         public void CheckPasteInput()
         {

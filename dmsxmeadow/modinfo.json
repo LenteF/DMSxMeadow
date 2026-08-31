@@ -1,0 +1,24 @@
+{
+  "id": "dmsxmeadow",
+  "name": "DMSxMeadow",
+  "version": "1.4.3",
+  "hide_version": false,
+  "authors": "lente, IADhunter",
+  "description": "Turn on 'Share Your Skin' in options to automatically share your custom skin with other Rain Meadow players! Optionally, set manual overrides by entering a Steam ID in the Get Fancy > Meadow menu (manual assignments always take priority). Includes independent Identity UI colors and spectator skin privacy controls.",
+  "requirements": [
+    "dressmyslugcat",
+    "henpemaz_rainmeadow"
+  ],
+  "requirements_names": [
+    "Dress My Slugcat",
+    "Rain Meadow"
+  ],
+  "checksum_override_version": false,
+  "tags": [
+    "Tools",
+    "Dependency",
+    "Game Modes",
+    "Cosmetics",
+    "Game Mechanics"
+  ]
+}

@@ -1,0 +1,28 @@
+0// DMSxMeadow - English strings
+dmsxm_tab_online|Online
+dmsxm_tab_local|Local
+dmsxm_title_online|ONLINE OPTIONS
+dmsxm_title_profiles|PROFILE MANAGER
+dmsxm_title_banned|BANNED SKIN LIST
+dmsxm_share_label|Share Your Skin
+dmsxm_friends_label|Only Steam Friends Skins
+dmsxm_mode_id|Player ID
+dmsxm_mode_name|Name
+dmsxm_mode_profile|Profile #
+dmsxm_delete|Delete
+dmsxm_row_profile|Profile <num>  <id>
+dmsxm_row_orphan|Profile <num>  [orphan]
+dmsxm_profile_label|Profile:
+dmsxm_set_btn|SET
+dmsxm_playerid_label|Player ID:
+dmsxm_status_meadow_off|Meadow mode is OFF
+dmsxm_status_invalid|Invalid profile number
+dmsxm_status_range|Profile must be 1-99
+dmsxm_status_already|Already on profile <num>
+dmsxm_status_saved|Player ID saved
+dmsxm_status_deleted|Profile deleted
+dmsxm_ban_desc|Ban the skin of <name> (local, permanent)
+dmsxm_unban_desc|Unban the skin of <name> (local, permanent)
+Identity|Identity
+Other players will be able to see your current skin|Other players will be able to see your current skin
+ShareSkin is off: other players will not see your skin|ShareSkin is off: other players will not see your skin

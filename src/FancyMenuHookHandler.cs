@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using Menu;
 using MonoMod.RuntimeDetour;
@@ -15,6 +16,8 @@ namespace DMSxMeadow
         private static Hook setSelectedHook;
         private static Hook shutdownHook;
         private static Hook customizationFor3ArgHook;
+        private static Hook galleryDialogCtorHook;
+        private static Hook galleryDialogSingalHook;
         private static Dictionary<DressMySlugcat.FancyMenu, MeadowProfileUI> _uiInstances = new Dictionary<DressMySlugcat.FancyMenu, MeadowProfileUI>();
 
         private static DressMySlugcat.FancyMenu _currentFancyMenu;
@@ -105,6 +108,34 @@ namespace DMSxMeadow
                     if (hookFor3Arg != null)
                     {
                         customizationFor3ArgHook = new Hook(for3Arg, hookFor3Arg);
+                    }
+                }
+
+                MethodBase galleryCtor = typeof(DressMySlugcat.GalleryDialog)
+                    .GetConstructor(new[] { typeof(string), typeof(DressMySlugcat.FancyMenu) });
+
+                if (galleryCtor != null)
+                {
+                    MethodInfo hookGalleryCtor = typeof(FancyMenuHookHandler)
+                        .GetMethod("GalleryDialog_Ctor_Hook",
+                            BindingFlags.NonPublic | BindingFlags.Static);
+
+                    if (hookGalleryCtor != null)
+                    {
+                        galleryDialogCtorHook = new Hook(galleryCtor, hookGalleryCtor);
+                    }
+                }
+
+                MethodInfo gallerySingalMethod = typeof(DressMySlugcat.GalleryDialog).GetMethod("Singal");
+                if (gallerySingalMethod != null)
+                {
+                    MethodInfo hookGallerySingal = typeof(FancyMenuHookHandler)
+                        .GetMethod("GalleryDialog_Singal_Hook",
+                            BindingFlags.NonPublic | BindingFlags.Static);
+
+                    if (hookGallerySingal != null)
+                    {
+                        galleryDialogSingalHook = new Hook(gallerySingalMethod, hookGallerySingal);
                     }
                 }
             }
@@ -264,6 +295,7 @@ namespace DMSxMeadow
 
             if (series.StartsWith("PLAYER_") && MeadowProfileManager.IsMeadowModeActive)
             {
+                Plugin.Logger.LogDebug($"[MEADOW-MODE] PLAYER_ selector '{series}' (index {to}) while meadow ON -> deactivating meadow mode to return to DMS profile");
                 if (_uiInstances.TryGetValue(self, out var ui))
                 {
                     ui.DeactivateMeadowMode();
@@ -281,6 +313,7 @@ namespace DMSxMeadow
             {
                 if (_uiInstances.TryGetValue(self, out var ui))
                 {
+                    Plugin.Logger.LogDebug($"[MEADOW-EXIT] leaving Get Fancy meadow={MeadowProfileManager.IsMeadowModeActive} slugcat={self.selectedSlugcat} player={self.selectedPlayerIndex}");
                     if (MeadowProfileManager.IsMeadowModeActive)
                     {
                         ui.ForceDeactivateMeadowMode();
@@ -358,9 +391,10 @@ namespace DMSxMeadow
                 try
                 {
                     if (_uiInstances.TryGetValue(fancyMenu, out var ui))
-                    {
-                        ui.SaveCurrentProfile();
-                    }
+                {
+                    Plugin.Logger.LogDebug($"[MEADOW-SAVE] auto-save triggered by signal '{message}' slugcat={fancyMenu.selectedSlugcat} player={fancyMenu.selectedPlayerIndex}");
+                    ui.SaveCurrentProfile();
+                }
                 }
                 catch (Exception ex)
                 {
@@ -369,6 +403,98 @@ namespace DMSxMeadow
             }
 
             orig(fancyMenu, sender, message);
+        }
+
+        private static void GalleryDialog_Ctor_Hook(
+            Action<DressMySlugcat.GalleryDialog, string, DressMySlugcat.FancyMenu> orig,
+            DressMySlugcat.GalleryDialog self,
+            string spriteName,
+            DressMySlugcat.FancyMenu owner)
+        {
+            List<DressMySlugcat.SpriteSheet> hiddenSheets = HideCachedSheetsFromGallery();
+            try
+            {
+                Plugin.Logger.LogDebug($"[MEADOW-GALLERY] open '{spriteName}' slugcat={owner.selectedSlugcat} player={owner.selectedPlayerIndex} meadow={MeadowProfileManager.IsMeadowModeActive}");
+                orig(self, spriteName, owner);
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.LogError($"Error en GalleryDialog ctor hook: {ex.Message}");
+            }
+            finally
+            {
+                RestoreHiddenSheets(hiddenSheets);
+            }
+        }
+
+        private static void GalleryDialog_Singal_Hook(
+            Action<DressMySlugcat.GalleryDialog, MenuObject, string> orig,
+            DressMySlugcat.GalleryDialog self,
+            MenuObject sender,
+            string message)
+        {
+            orig(self, sender, message);
+
+            if (message != "BACK") return;
+
+            try
+            {
+                var customization = DressMySlugcat.Customization.For(
+                    self.owner.selectedSlugcat,
+                    self.owner.selectedPlayerIndex,
+                    false);
+                string headSheet = customization?.CustomSprite(self.spriteName)?.SpriteSheetID ?? "(none)";
+                Plugin.Logger.LogDebug($"[MEADOW-GALLERY] close '{self.spriteName}' slugcat={self.owner.selectedSlugcat} player={self.owner.selectedPlayerIndex} meadow={MeadowProfileManager.IsMeadowModeActive} selectedSheet={headSheet}");
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.LogError($"Error logging gallery close: {ex.Message}");
+            }
+        }
+
+        private static List<DressMySlugcat.SpriteSheet> HideCachedSheetsFromGallery()
+        {
+            var hiddenSheets = new List<DressMySlugcat.SpriteSheet>();
+            try
+            {
+                HashSet<string> cachedIds = SkinRegistration.GetCachedSheetIds();
+                if (cachedIds.Count == 0) return hiddenSheets;
+
+                for (int i = DressMySlugcat.Plugin.SpriteSheets.Count - 1; i >= 0; i--)
+                {
+                    var sheet = DressMySlugcat.Plugin.SpriteSheets[i];
+                    if (sheet != null && cachedIds.Contains(sheet.ID))
+                    {
+                        hiddenSheets.Add(sheet);
+                        DressMySlugcat.Plugin.SpriteSheets.RemoveAt(i);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.LogError($"Error ocultando hojas de caché del gallery: {ex.Message}");
+            }
+            return hiddenSheets;
+        }
+
+        private static void RestoreHiddenSheets(List<DressMySlugcat.SpriteSheet> hiddenSheets)
+        {
+            try
+            {
+                foreach (var sheet in hiddenSheets)
+                {
+                    if (sheet == null) continue;
+                    bool alreadyPresent = DressMySlugcat.Plugin.SpriteSheets.Any(s => s != null && s.ID.Equals(sheet.ID, StringComparison.Ordinal));
+                    if (!alreadyPresent)
+                    {
+                        DressMySlugcat.Plugin.SpriteSheets.Add(sheet);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.LogError($"Error restaurando hojas de caché tras el gallery: {ex.Message}");
+            }
         }
 
         private static void HandleMeadowCopyPasteDefaults(DressMySlugcat.FancyMenu fancyMenu, string message)
@@ -421,6 +547,7 @@ namespace DMSxMeadow
 
             if (message == "CUST_DEFAULTS")
             {
+                Plugin.Logger.LogDebug($"[MEADOW-RESET] CUST_DEFAULTS applying defaults to slugcat={slugcat} player={playerNumber} (clearing CustomSprites)");
                 var defaults = DressMySlugcat.SpriteDefinitions.GetSlugcatDefault(slugcat, playerNumber)?.Copy();
                 live.CustomSprites.Clear();
 
@@ -527,6 +654,8 @@ namespace DMSxMeadow
             setSelectedHook?.Dispose();
             shutdownHook?.Dispose();
             customizationFor3ArgHook?.Dispose();
+            galleryDialogCtorHook?.Dispose();
+            galleryDialogSingalHook?.Dispose();
             _uiInstances.Clear();
             _currentFancyMenu = null;
             _liveMeadowCustomizations.Clear();
