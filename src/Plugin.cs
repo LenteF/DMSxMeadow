@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace DMSxMeadow
 {
-    [BepInPlugin("dmsxmeadow", "DMSxMeadow", "1.4.0")]
+    [BepInPlugin("dmsxmeadow", "DMSxMeadow", "1.4.3")]
     [BepInDependency("dressmyslugcat", BepInDependency.DependencyFlags.HardDependency)]
     [BepInDependency("henpemaz.rainmeadow", BepInDependency.DependencyFlags.HardDependency)]
     public class Plugin : BaseUnityPlugin
