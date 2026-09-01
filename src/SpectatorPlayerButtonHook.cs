@@ -34,7 +34,6 @@ namespace DMSxMeadow
                 .GetMethod(nameof(SpectatorOverlay_Update), BindingFlags.NonPublic | BindingFlags.Static);
 
             spectatorUpdateHook = new Hook(updateMethod, hookMethod);
-            Plugin.Logger.LogDebug("Hook del overlay de espectador activado (botón placeholder por jugador tras el 'x').");
         }
 
         private static void SpectatorOverlay_Update(Action<SpectatorOverlay> orig, SpectatorOverlay self)
@@ -92,7 +91,7 @@ namespace DMSxMeadow
 
                     playerButton.subObjects.Add(banSkinButton);
                     PlaceholdersByButton.Add(playerButton, banSkinButton);
-                    Plugin.Logger.LogDebug($"Botón de ban de skin añadido a la fila de {playerButton.player.id} ({(banned ? "baneado" : "activo")}).");
+
                 }
             }
             catch (Exception ex)

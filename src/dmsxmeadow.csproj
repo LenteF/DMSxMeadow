@@ -26,56 +26,55 @@
 
 <ItemGroup>
   <Reference Include="0Harmony">
-    <HintPath>..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Rain World\BepInEx\core\0Harmony.dll</HintPath>
+    <HintPath>D:\Programas\Steam\steamapps\common\Rain World\BepInEx\core\0Harmony.dll</HintPath>
   </Reference>
   <Reference Include="BepInEx">
-    <HintPath>..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Rain World\BepInEx\core\BepInEx.dll</HintPath>
+    <HintPath>D:\Programas\Steam\steamapps\common\Rain World\BepInEx\core\BepInEx.dll</HintPath>
   </Reference>
   <Reference Include="com.rlabrecque.steamworks.net">
-    <HintPath>..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Rain World\RainWorld_Data\Managed\com.rlabrecque.steamworks.net.dll</HintPath>
+    <HintPath>D:\Programas\Steam\steamapps\common\Rain World\RainWorld_Data\Managed\com.rlabrecque.steamworks.net.dll</HintPath>
   </Reference>
   <Reference Include="DressMySlugcat">
-    <HintPath>..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\workshop\content\312520\2948971756\newest\plugins\DressMySlugcat.dll</HintPath>
+    <HintPath>D:\Programas\Steam\steamapps\workshop\content\312520\2948971756\newest\plugins\DressMySlugcat.dll</HintPath>
   </Reference>
   <Reference Include="HOOKS-Assembly-CSharp">
-    <HintPath>..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Rain World\BepInEx\plugins\HOOKS-Assembly-CSharp.dll</HintPath>
+    <HintPath>D:\Programas\Steam\steamapps\common\Rain World\BepInEx\plugins\HOOKS-Assembly-CSharp.dll</HintPath>
   </Reference>
   <Reference Include="Mono.Cecil">
-    <HintPath>..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Rain World\BepInEx\core\Mono.Cecil.dll</HintPath>
+    <HintPath>D:\Programas\Steam\steamapps\common\Rain World\BepInEx\core\Mono.Cecil.dll</HintPath>
   </Reference>
   <Reference Include="MonoMod.RuntimeDetour">
-    <HintPath>..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Rain World\BepInEx\core\MonoMod.RuntimeDetour.dll</HintPath>
+    <HintPath>D:\Programas\Steam\steamapps\common\Rain World\BepInEx\core\MonoMod.RuntimeDetour.dll</HintPath>
   </Reference>
   <Reference Include="MonoMod.Utils">
-    <HintPath>..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Rain World\BepInEx\core\MonoMod.Utils.dll</HintPath>
+    <HintPath>D:\Programas\Steam\steamapps\common\Rain World\BepInEx\core\MonoMod.Utils.dll</HintPath>
   </Reference>
   <Reference Include="Assembly-CSharp">
-    <HintPath>..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Rain World\BepInEx\utils\PUBLIC-Assembly-CSharp.dll</HintPath>
+    <HintPath>D:\Programas\Steam\steamapps\common\Rain World\BepInEx\utils\PUBLIC-Assembly-CSharp.dll</HintPath>
   </Reference>
   <Reference Include="Rain Meadow">
-    <HintPath>..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\workshop\content\312520\3388224007\plugins\Rain Meadow.dll</HintPath>
+    <HintPath>D:\Programas\Steam\steamapps\workshop\content\312520\3388224007\plugins\Rain Meadow.dll</HintPath>
   </Reference>
   <Reference Include="UnityEngine">
-    <HintPath>..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Rain World\RainWorld_Data\Managed\UnityEngine.dll</HintPath>
+    <HintPath>D:\Programas\Steam\steamapps\common\Rain World\RainWorld_Data\Managed\UnityEngine.dll</HintPath>
   </Reference>
   <Reference Include="UnityEngine.CoreModule">
-    <HintPath>..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Rain World\RainWorld_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+    <HintPath>D:\Programas\Steam\steamapps\common\Rain World\RainWorld_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
   </Reference>
   <Reference Include="UnityEngine.ImageConversionModule">
-    <HintPath>..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Rain World\RainWorld_Data\Managed\UnityEngine.ImageConversionModule.dll</HintPath>
+    <HintPath>D:\Programas\Steam\steamapps\common\Rain World\RainWorld_Data\Managed\UnityEngine.ImageConversionModule.dll</HintPath>
   </Reference>
   <Reference Include="UnityEngine.IMGUIModule">
-    <HintPath>..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Rain World\RainWorld_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath>
+    <HintPath>D:\Programas\Steam\steamapps\common\Rain World\RainWorld_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath>
   </Reference>
   <Reference Include="UnityEngine.InputLegacyModule">
-    <HintPath>..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Rain World\RainWorld_Data\Managed\UnityEngine.InputLegacyModule.dll</HintPath>
+    <HintPath>D:\Programas\Steam\steamapps\common\Rain World\RainWorld_Data\Managed\UnityEngine.InputLegacyModule.dll</HintPath>
   </Reference>
 </ItemGroup>
 
   <Target Name="GenerateMod" AfterTargets="Build">
     <ItemGroup>
       <RemovePlugins Include="$(OutputPath)*.dll" Exclude="$(OutputPath)dmsxmeadow.dll" />
-	  <RemovePlugins Include="$(OutputPath)*.dll.config" />
       <RemovePlugins Include="$(OutputPath)*.pdb" />
 	  <RemovePlugins Include="$(OutputPath)*.xml" />
     </ItemGroup>

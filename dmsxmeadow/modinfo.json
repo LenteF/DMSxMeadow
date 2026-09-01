@@ -1,7 +1,7 @@
 {
   "id": "dmsxmeadow",
   "name": "DMSxMeadow",
-  "version": "1.4.3",
+  "version": "1.4.4",
   "hide_version": false,
   "authors": "lente, IADhunter",
   "description": "Turn on 'Share Your Skin' in options to automatically share your custom skin with other Rain Meadow players! Optionally, set manual overrides by entering a Steam ID in the Get Fancy > Meadow menu (manual assignments always take priority). Includes independent Identity UI colors and spectator skin privacy controls.",

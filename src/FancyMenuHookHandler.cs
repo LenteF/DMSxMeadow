@@ -295,7 +295,6 @@ namespace DMSxMeadow
 
             if (series.StartsWith("PLAYER_") && MeadowProfileManager.IsMeadowModeActive)
             {
-                Plugin.Logger.LogDebug($"[MEADOW-MODE] PLAYER_ selector '{series}' (index {to}) while meadow ON -> deactivating meadow mode to return to DMS profile");
                 if (_uiInstances.TryGetValue(self, out var ui))
                 {
                     ui.DeactivateMeadowMode();
@@ -313,7 +312,6 @@ namespace DMSxMeadow
             {
                 if (_uiInstances.TryGetValue(self, out var ui))
                 {
-                    Plugin.Logger.LogDebug($"[MEADOW-EXIT] leaving Get Fancy meadow={MeadowProfileManager.IsMeadowModeActive} slugcat={self.selectedSlugcat} player={self.selectedPlayerIndex}");
                     if (MeadowProfileManager.IsMeadowModeActive)
                     {
                         ui.ForceDeactivateMeadowMode();
@@ -392,7 +390,6 @@ namespace DMSxMeadow
                 {
                     if (_uiInstances.TryGetValue(fancyMenu, out var ui))
                 {
-                    Plugin.Logger.LogDebug($"[MEADOW-SAVE] auto-save triggered by signal '{message}' slugcat={fancyMenu.selectedSlugcat} player={fancyMenu.selectedPlayerIndex}");
                     ui.SaveCurrentProfile();
                 }
                 }
@@ -414,7 +411,6 @@ namespace DMSxMeadow
             List<DressMySlugcat.SpriteSheet> hiddenSheets = HideCachedSheetsFromGallery();
             try
             {
-                Plugin.Logger.LogDebug($"[MEADOW-GALLERY] open '{spriteName}' slugcat={owner.selectedSlugcat} player={owner.selectedPlayerIndex} meadow={MeadowProfileManager.IsMeadowModeActive}");
                 orig(self, spriteName, owner);
             }
             catch (Exception ex)
@@ -444,7 +440,6 @@ namespace DMSxMeadow
                     self.owner.selectedPlayerIndex,
                     false);
                 string headSheet = customization?.CustomSprite(self.spriteName)?.SpriteSheetID ?? "(none)";
-                Plugin.Logger.LogDebug($"[MEADOW-GALLERY] close '{self.spriteName}' slugcat={self.owner.selectedSlugcat} player={self.owner.selectedPlayerIndex} meadow={MeadowProfileManager.IsMeadowModeActive} selectedSheet={headSheet}");
             }
             catch (Exception ex)
             {
@@ -547,7 +542,6 @@ namespace DMSxMeadow
 
             if (message == "CUST_DEFAULTS")
             {
-                Plugin.Logger.LogDebug($"[MEADOW-RESET] CUST_DEFAULTS applying defaults to slugcat={slugcat} player={playerNumber} (clearing CustomSprites)");
                 var defaults = DressMySlugcat.SpriteDefinitions.GetSlugcatDefault(slugcat, playerNumber)?.Copy();
                 live.CustomSprites.Clear();
 

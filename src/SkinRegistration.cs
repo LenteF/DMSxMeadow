@@ -117,7 +117,6 @@ namespace DMSxMeadow
 
             string renamedId = ComputeRenamedSkinId(senderSteamId, skinId);
             remaps[skinId] = renamedId;
-            Plugin.Logger.LogDebug($"🔀 Skin '{skinId}' de {senderSteamId} registrada bajo el id renombrado '{renamedId}' (H-5: no contamina el catálogo local).");
             return renamedId;
         }
 
@@ -142,7 +141,6 @@ namespace DMSxMeadow
 
                 if (RegisteredMemorySheets.Contains(renamedId))
                 {
-                    Plugin.Logger.LogDebug($"♻️ Skin '{skinId}' ya registrada en memoria (id '{renamedId}'). Sin re-registro.");
                     return true;
                 }
 
@@ -157,8 +155,6 @@ namespace DMSxMeadow
                 GetOrCreateRemap(senderSteamId, skinId);
                 DressMySlugcat.Plugin.SpriteSheets.Add(sheet);
                 RegisteredMemorySheets.Add(renamedId);
-
-                Plugin.Logger.LogDebug($"🧠 Skin '{skinId}' de {senderSteamId} registrada EN MEMORIA como '{renamedId}' ({sheet.Atlases.Count} atlas, {sheet.Elements.Count + sheet.LeftElements.Count + sheet.RightElements.Count} elementos).");
 
                 Plugin.ScheduleRecreateForSteamId(senderSteamId);
                 return true;
@@ -293,11 +289,8 @@ namespace DMSxMeadow
                 {
                     throw new Exception($"No se pudo decodificar el PNG '{pngName}'.");
                 }
-                Plugin.Logger.LogDebug($"📥 Parte '{pngName}' ({pngBytes.Length} B): textura {texture.width}x{texture.height} {texture.format}, filtro={texture.filterMode}, wrap={texture.wrapMode}, aniso={texture.anisoLevel}.");
 
                 atlas = new FAtlas(atlasName, texture, NextMemoryAtlasIndex(), false);
-                Plugin.Logger.LogDebug($"  FAtlas '{atlasName}' creado (index {atlas.index}, textura {texture.width}x{texture.height}).");
-
                 atlas.elements.RemoveAt(0);
 
                 string jsonText = EncodingUtf8(txtBytes);
@@ -311,8 +304,6 @@ namespace DMSxMeadow
                 float texWidth = texture.width;
                 float texHeight = texture.height;
                 int indexInAtlas = 0;
-                bool firstFrameLogged = false;
-                Plugin.Logger.LogDebug($"  JSON OK: {framesObj.Count} frame(s) definidos en el .txt de '{pngName}'.");
 
                 foreach (JProperty frameProp in framesObj.Properties())
                 {
@@ -369,12 +360,6 @@ namespace DMSxMeadow
                     element.sourceSize.y = srcH * resourceScaleInverse;
                     element.sourceRect = new Rect(sssX * resourceScaleInverse, sssY * resourceScaleInverse, sssW * resourceScaleInverse, sssH * resourceScaleInverse);
 
-                    if (!firstFrameLogged)
-                    {
-                        firstFrameLogged = true;
-                        Plugin.Logger.LogDebug($"  Primer frame '{elementName}': txt=({x},{y},{w},{h}) en textura {texWidth}x{texHeight} -> uv={uvRect} (origen TL {element.uvTopLeft}), trimmed={trimmed}, sourceSize={element.sourceSize}");
-                    }
-
                     atlas.elements.Add(element);
                 }
 
@@ -384,7 +369,6 @@ namespace DMSxMeadow
                 }
 
                 AddAtlasToManager(atlas);
-                Plugin.Logger.LogDebug($"  Atlas '{atlasName}' registrado en el manager con {indexInAtlas} frame(s).");
 
                 return atlas;
             }
@@ -499,10 +483,6 @@ namespace DMSxMeadow
             MemorySkinCacheBySender.Clear();
             MemoryRemapBySender.Clear();
 
-            if (released > 0 || cachedEntries > 0)
-            {
-                Plugin.Logger.LogDebug($"🧹 Wipe total (MainMenu): {released} hoja(s) de memoria descargadas y {cachedEntries} entrada(s) de caché purgadas.");
-            }
             return released + cachedEntries;
         }
 
@@ -534,12 +514,7 @@ namespace DMSxMeadow
                 cached = skinsBySender.Count;
                 MemorySkinCacheBySender.Remove(senderSteamId);
             }
-            bool remapRemoved = MemoryRemapBySender.Remove(senderSteamId);
-
-            if (released > 0 || cached > 0 || remapRemoved)
-            {
-                Plugin.Logger.LogDebug($"🧹 Estado en memoria de {senderSteamId} purgado (ban de skins): {released} hoja(s) descargada(s), {cached} entrada(s) de caché, remaps {(remapRemoved ? "eliminados" : "sin tocar")}.");
-            }
+            MemoryRemapBySender.Remove(senderSteamId);
 
             return released + cached;
         }
@@ -620,7 +595,6 @@ namespace DMSxMeadow
                 files[metadataRelative] = File.ReadAllBytes(metadataFull);
             }
 
-            Plugin.Logger.LogDebug($"📦 Skin '{skinId}' empaquetada con éxito desde disco ({files.Count} archivos: {pngPaths.Count} partes + txts + metadata).");
             return files;
         }
 
@@ -731,16 +705,14 @@ namespace DMSxMeadow
 
                                 if (string.Equals(extractedId, skinId, StringComparison.Ordinal))
                                 {
-                                    Plugin.Logger.LogDebug($"🎯 Skin '{skinId}' encontrada con éxito en: {skinDir}");
                                     return skinDir;
                                 }
                             }
                         }
                     }
                 }
-                catch (Exception ex)
+                catch
                 {
-                    Plugin.Logger.LogDebug($"Error al leer metadata.json en {skinDir}: {ex.Message}");
                 }
             }
             return null;

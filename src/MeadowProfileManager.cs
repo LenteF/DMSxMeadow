@@ -241,11 +241,11 @@ namespace DMSxMeadow
                 Database.Profiles[internalNumber] = profile;
                 _unsavedProfiles.Remove(CurrentProfileNumber);
                 Save();
-                Plugin.Logger.LogDebug($"[MEADOW-PERSIST] profile {CurrentProfileNumber} slugcat={slugcatName} head={headSheet} sprites={customization.CustomSprites?.Count ?? 0} steamId={steamId} -> DISK");
+
             }
             else
             {
-                Plugin.Logger.LogDebug($"[MEADOW-PERSIST] profile {CurrentProfileNumber} slugcat={slugcatName} head={headSheet} sprites={customization.CustomSprites?.Count ?? 0} -> MEMORY ONLY (no steamId assigned)");
+
             }
         }
 
@@ -321,6 +321,8 @@ namespace DMSxMeadow
 
             if (string.IsNullOrEmpty(steamId)) return null;
             if (string.IsNullOrEmpty(slugcatName)) return null;
+
+            if (slugcatName == "MeadowOnline") slugcatName = "White";
 
             if (_assignments.TryGetValue(steamId, out int profileNumber))
             {

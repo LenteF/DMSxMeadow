@@ -70,7 +70,7 @@ private const float HeadSizeMultiplier = 1f;
                 MethodInfo hookMethod = typeof(StoryLobbyShareSkinIndicator)
                     .GetMethod(nameof(StoryOnlineMenu_Ctor), BindingFlags.NonPublic | BindingFlags.Static);
                 storyMenuCtorHook = new Hook(ctor, hookMethod);
-                Plugin.Logger.LogDebug("Indicador ShareSkin del lobby de historia activado (solo se muestra con ShareSkin ON).");
+
 
                 ConstructorInfo arenaCtor = typeof(ArenaOnlineLobbyMenu)
                     .GetConstructor(new[] { typeof(ProcessManager) });
@@ -79,14 +79,14 @@ private const float HeadSizeMultiplier = 1f;
                     MethodInfo arenaHookMethod = typeof(StoryLobbyShareSkinIndicator)
                         .GetMethod(nameof(ArenaOnlineLobbyMenu_Ctor), BindingFlags.NonPublic | BindingFlags.Static);
                     arenaMenuCtorHook = new Hook(arenaCtor, arenaHookMethod);
-                    Plugin.Logger.LogDebug("Indicador ShareSkin del lobby de arena activado (solo se muestra con ShareSkin ON).");
+
                 }
             }
-            catch (Exception ex)
-            {
-                Plugin.Logger.LogError($"Error inicializando indicador ShareSkin del lobby: {ex}");
+                catch
+                {
+                }
             }
-        }
+
 
         private static void StoryOnlineMenu_Ctor(Action<StoryOnlineMenu, ProcessManager> orig, StoryOnlineMenu self, ProcessManager manager)
         {
@@ -120,11 +120,11 @@ private const float HeadSizeMultiplier = 1f;
                 if (!square.HasContent) return;
                 menu.pages[0].subObjects.Add(square);
             }
-            catch (Exception ex)
-            {
-                Plugin.Logger.LogError($"Error creando indicador ShareSkin del lobby: {ex}");
+                catch
+                {
+                }
             }
-        }
+
 
         public static void Dispose()
         {
@@ -640,9 +640,8 @@ private const float HeadSizeMultiplier = 1f;
                     _glowSprite.anchorY = 0f;
                     _glowSprite.alpha = PulseMaxAlpha;
                 }
-                catch (Exception ex)
+                catch
                 {
-                    Plugin.Logger.LogDebug($"No se pudo construir la capa del glow: {ex.Message}");
                 }
             }
 
@@ -712,9 +711,8 @@ private const float HeadSizeMultiplier = 1f;
                         _scarColor = ResolvePartExtraColor(slugcat, "FACESCAR", new Color(0.27059f, 0.15686f, 0.23529f));
                     }
                 }
-                catch (Exception ex)
+                catch
                 {
-                    Plugin.Logger.LogDebug($"No se pudieron resolver las piezas de cabeza de '{slugcat}': {ex.Message}");
                 }
             }
 
@@ -1046,14 +1044,14 @@ private const float HeadSizeMultiplier = 1f;
                     string txtPath = Path.Combine(basePath, "head.txt");
                     if (!File.Exists(pngPath) || !File.Exists(txtPath))
                     {
-                        Plugin.Logger.LogDebug($"No se encontró 'ui\\{HeadPngName}' o 'ui\\head.txt': glow de skin default desactivado.");
+
                         return false;
                     }
 
                     Texture2D texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
                     if (!texture.LoadImage(File.ReadAllBytes(pngPath)))
                     {
-                        Plugin.Logger.LogDebug($"No se pudo decodificar '{pngPath}': glow de skin default desactivado.");
+
                         return false;
                     }
 
@@ -1062,7 +1060,7 @@ private const float HeadSizeMultiplier = 1f;
                     if (!TryParseTexturePackerFrame(txtPath, "HeadA0.png", out int rx, out int ry, out int rw, out int rh)
                         || rw <= 0 || rh <= 0)
                     {
-                        Plugin.Logger.LogDebug($"No se pudo parsear el rect de HeadA0 en ui\\head.txt: glow de skin default desactivado.");
+
                         UnityEngine.Object.Destroy(texture);
                         return false;
                     }
@@ -1094,9 +1092,8 @@ private const float HeadSizeMultiplier = 1f;
                     height = _cachedDefaultHeadH;
                     return true;
                 }
-                catch (Exception ex)
+                catch
                 {
-                    Plugin.Logger.LogDebug($"No se pudo cargar el head default '{HeadPngName}': {ex.Message}");
                     return false;
                 }
             }
@@ -1263,9 +1260,8 @@ private const float HeadSizeMultiplier = 1f;
 
                     return element != null;
                 }
-                catch (Exception ex)
+                catch
                 {
-                    Plugin.Logger.LogDebug($"No se pudo resolver el elemento '{elementName}' de '{slugcat}' para el indicador ShareSkin: {ex.Message}");
                     return false;
                 }
             }

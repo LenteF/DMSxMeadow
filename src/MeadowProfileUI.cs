@@ -253,7 +253,7 @@ namespace DMSxMeadow
             string currentSlugcat = _fancyMenu.selectedSlugcat;
             if (currentSlugcat != _lastKnownSlugcat)
             {
-                Plugin.Logger.LogDebug($"[MEADOW-LOAD] slugcat change '{_lastKnownSlugcat}' -> '{currentSlugcat}', reloading profile {MeadowProfileManager.CurrentProfileNumber} (unsaved edits may be lost)");
+
                 _lastKnownSlugcat = currentSlugcat;
                 LoadProfile(MeadowProfileManager.CurrentProfileNumber);
             }
@@ -305,7 +305,7 @@ namespace DMSxMeadow
             {
                 if (!MeadowProfileManager.IsMeadowModeActive)
                 {
-                    Plugin.Logger.LogDebug($"[MEADOW-SAVE] skip: meadow OFF (slugcat={_fancyMenu.selectedSlugcat}, player={_fancyMenu.selectedPlayerIndex})");
+
                     return;
                 }
 
@@ -314,12 +314,12 @@ namespace DMSxMeadow
                 {
                     string slugcatName = _fancyMenu.selectedSlugcat;
                     string headSheet = GetHeadSheetId(customization);
-                    Plugin.Logger.LogDebug($"[MEADOW-SAVE] writing profile {MeadowProfileManager.CurrentProfileNumber} slugcat={slugcatName} player={_fancyMenu.selectedPlayerIndex} head={headSheet} sprites={customization.CustomSprites?.Count ?? 0}");
+
                     MeadowProfileManager.SaveCurrentProfile(slugcatName, customization);
                 }
                 else
                 {
-                    Plugin.Logger.LogDebug($"[MEADOW-SAVE] live customization is null");
+
                 }
             }
             catch (Exception ex)
@@ -360,7 +360,7 @@ namespace DMSxMeadow
                 string slugcatName = _fancyMenu.selectedSlugcat;
                 var customization = MeadowProfileManager.GetProfileCustomization(displayNumber, slugcatName);
                 string headSheet = customization?.CustomSprites?.FirstOrDefault(s => s.Sprite == "HEAD")?.SpriteSheetID ?? "(none)";
-                Plugin.Logger.LogDebug($"[MEADOW-LOAD] profile {displayNumber} slugcat={slugcatName} found={(customization != null)} head={headSheet} sprites={customization?.CustomSprites?.Count ?? 0}");
+
                 var live = GetLiveCustomization();
                 if (live == null)
                 {
@@ -542,8 +542,6 @@ namespace DMSxMeadow
             _lastKnownSlugcat = _fancyMenu.selectedSlugcat;
             LoadProfile(profileNumber);
 
-            Plugin.Logger.LogDebug($"[MEADOW-MODE] ACTIVATED (profile {MeadowProfileManager.CurrentProfileNumber}, slugcat={_fancyMenu.selectedSlugcat}, player={_fancyMenu.selectedPlayerIndex})");
-
             RefreshDummyAndControls();
         }
 
@@ -563,8 +561,6 @@ namespace DMSxMeadow
             _profileFieldWasHeld = false;
             _steamFieldWasHeld = false;
             _lastKnownSlugcat = "";
-
-            Plugin.Logger.LogDebug($"[MEADOW-MODE] DEACTIVATED (profile {MeadowProfileManager.CurrentProfileNumber}, slugcat={_fancyMenu.selectedSlugcat}, player={_fancyMenu.selectedPlayerIndex})");
 
             MeadowProfileManager.IsMeadowModeActive = false;
             _statusLabel.text = "";
@@ -606,8 +602,6 @@ namespace DMSxMeadow
             _profileFieldWasHeld = false;
             _steamFieldWasHeld = false;
             _lastKnownSlugcat = "";
-
-            Plugin.Logger.LogDebug($"[MEADOW-MODE] FORCE-DEACTIVATED (profile {MeadowProfileManager.CurrentProfileNumber}, slugcat={_fancyMenu.selectedSlugcat}, player={_fancyMenu.selectedPlayerIndex})");
 
             MeadowProfileManager.IsMeadowModeActive = false;
             _statusLabel.text = "";

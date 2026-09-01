@@ -95,7 +95,7 @@ namespace DMSxMeadow
                 _shareSkinConfig.Value = ShareSkinEnabled;
                 _friendsOnlyConfig.Value = FriendsOnlyEnabled;
 
-                Plugin.Logger.LogDebug($"Flags (fuente: ModConfigs/dmsxmeadow.txt): ShareSkin={ShareSkinEnabled}, SoloAmigos={FriendsOnlyEnabled}");
+
             }
             catch (Exception ex)
             {
@@ -189,7 +189,7 @@ _onlineTab = new OpTab(this, Plugin.Tr("dmsxm_tab_online", ONLINE_TAB_NAME));
                 {
                     bool changed = parsed != ShareSkinEnabled;
                     WriteBoolToConfigFile("shareSkin", parsed);
-                    Plugin.Logger.LogDebug($"Checkbox de compartir: {(parsed ? "ON" : "OFF")} — escrito al archivo al instante{(changed ? ", re-emitiendo handshake." : " (sin cambio real).")}");
+
                     if (changed)
                     {
                         Plugin.RequestHandshakeReemit();
@@ -218,13 +218,13 @@ _onlineTab = new OpTab(this, Plugin.Tr("dmsxm_tab_online", ONLINE_TAB_NAME));
                 {
                     bool changed = parsed != FriendsOnlyEnabled;
                     WriteBoolToConfigFile("friendsOnly", parsed);
-                    Plugin.Logger.LogDebug($"Checkbox 'solo amigos': {(parsed ? "ON" : "OFF")} — escrito al archivo al instante.");
+
                     if (changed && parsed)
                     {
                         SkinSerializer.ForgetAllPlayers();
                         SkinTransfer.ClearAllTransfers();
                         Plugin.ScheduleRecreateAllSlugs();
-                        Plugin.Logger.LogDebug("🤝 'Solo amigos' activado: skins de no-amigos purgadas y slugs de la sala recreados a default.");
+
                     }
                 }
             };

@@ -37,7 +37,6 @@ namespace DMSxMeadow
             {
                 _instance = new SkinTransfer();
                 CustomManager.Subscribe(PacketKey, _instance);
-                Plugin.Logger.LogDebug($"SkinTransfer suscrito con éxito a la clave de paquetes '{PacketKey}'.");
             }
         }
 
@@ -80,7 +79,6 @@ namespace DMSxMeadow
             pending.LastRequestTime = Time.time;
             pending.AnyFileReceived = false;
 
-            Plugin.Logger.LogDebug($"Solicitando skin '{skinId}' al jugador {targetPlayer.id}... (intento {pending.Attempts}/{MaxRequestAttempts})");
             targetPlayer.InvokeRPC(SkinSerializer.RPC_RequestSkin, SkinSerializer.GetPlayerSteamId(OnlineManager.mePlayer), skinId);
         }
 
@@ -105,7 +103,6 @@ namespace DMSxMeadow
 
                     pending.Attempts = 0;
                     pending.RearmInterval = RequestRearmSeconds + UnityEngine.Random.Range(-RequestRearmJitter, RequestRearmJitter);
-                    Plugin.Logger.LogDebug($"🔄 Re-arm: reintentando '{pending.SkinId}' hacia {pending.Target?.id} (se había agotado el límite de reintentos).");
                 }
 
                 toRetry.Add(pending);
@@ -166,7 +163,6 @@ namespace DMSxMeadow
             string transferKey = RequestKey(requester.GetUniqueID(), skinId);
             if (TransfersRemaining.ContainsKey(transferKey))
             {
-                Plugin.Logger.LogDebug($"Ya hay una transferencia de '{skinId}' en curso hacia {requester.id}; se ignora la petición duplicada (probablemente un reintento del solicitante).");
                 return;
             }
 
@@ -186,8 +182,6 @@ namespace DMSxMeadow
 
             int total = sendable.Count;
             if (total == 0) return;
-
-            Plugin.Logger.LogDebug($"Encolando {total} archivos de la skin '{skinId}' hacia {requester.id} (envío throttled con ACK)...");
 
             TransfersRemaining[transferKey] = total;
 
@@ -253,7 +247,6 @@ namespace DMSxMeadow
 
             if (toRetry != null)
             {
-                Plugin.Logger.LogDebug($"⏱️ Sin ACK para '{toRetry.FileName}' ({toRetry.SkinId}) hacia {toRetry.Target?.id}. Reintentando (intento {toRetry.Attempts + 1}/{MaxFileAttempts})...");
                 SendOneFile(toRetry);
                 return;
             }
@@ -261,7 +254,6 @@ namespace DMSxMeadow
             var exhausted = InFlightFiles.Where(kvp => kvp.Value.Attempts >= MaxFileAttempts).ToList();
             foreach (var kvp in exhausted)
             {
-                Plugin.Logger.LogDebug($"❌ '{kvp.Value.FileName}' de la skin '{kvp.Value.SkinId}' hacia {kvp.Value.Target?.id} no se pudo confirmar tras {kvp.Value.Attempts} intentos. Se abandona ese archivo (el re-arm reintentará la skin).");
                 string droppedKey = RequestKey(kvp.Value.Target.GetUniqueID(), kvp.Value.SkinId);
                 DroppedFiles[droppedKey] = DroppedFiles.TryGetValue(droppedKey, out int drops) ? drops + 1 : 1;
                 CompleteOneFile(kvp.Key, kvp.Value);
@@ -306,11 +298,6 @@ namespace DMSxMeadow
                     if (DroppedFiles.TryGetValue(transferKey, out int drops))
                     {
                         DroppedFiles.Remove(transferKey);
-                        Plugin.Logger.LogDebug($"🚨 Transferencia de '{file.SkinId}' hacia {file.Target?.id} INCOMPLETA: {drops} archivo(s) abandonados tras agotar reintentos. El receptor no podrá recomponer la skin (RNF-3: queda con la piel por defecto hasta un re-arm).");
-                    }
-                    else
-                    {
-                        Plugin.Logger.LogDebug($"✅ Transferencia de '{file.SkinId}' hacia {file.Target?.id} finalizada (todos los archivos confirmados).");
                     }
                 }
                 else
@@ -349,13 +336,11 @@ namespace DMSxMeadow
                     string bannedIdentity = SkinSerializer.GetPlayerSteamId(fromPlayer);
                     if (SkinBanManager.IsBanned(bannedIdentity))
                     {
-                        Plugin.Logger.LogDebug($"⛔ CustomPacket de skin de {fromPlayer?.id} DESCARTADO: jugador baneado localmente.");
                         return;
                     }
 
                     if (!SkinSerializer.IsSteamFriendAllowed(bannedIdentity))
                     {
-                        Plugin.Logger.LogDebug($"⛔ CustomPacket de skin de {fromPlayer?.id} DESCARTADO: 'solo amigos' ON y el emisor no es amigo de Steam.");
                         return;
                     }
 
@@ -395,11 +380,6 @@ namespace DMSxMeadow
             foreach (string key in incompleteKeys)
             {
                 IncomingTransfers.Remove(key);
-            }
-
-            if (incompleteKeys.Count > 0)
-            {
-                Plugin.Logger.LogDebug($"🧹 Descartadas {incompleteKeys.Count} transferencia(s) entrante(s) incompleta(s) de {player.id} (jugador salió).");
             }
 
             var abortedKeys = AbortedIncomingTransfers.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList();
@@ -442,25 +422,14 @@ namespace DMSxMeadow
             foreach (var key in abortedToDrop) AbortedIncomingTransfers.Remove(key);
 
             SkinPartGuard.ForgetPlayer(uid);
-
-            int dropped = requestsToDrop.Count + incomingToDrop.Count + abortedToDrop.Count;
-            if (dropped > 0)
-            {
-                Plugin.Logger.LogDebug($"🧹 Estado entrante de {player.id} purgado ({dropped} elementos): handshake nuevo, el slugcat anterior quedó obsoleto.");
-            }
         }
 
         public static void AbortAllOutgoing()
         {
-            int dropped = OutgoingQueue.Count + InFlightFiles.Count + TransfersRemaining.Count;
             OutgoingQueue.Clear();
             InFlightFiles.Clear();
             TransfersRemaining.Clear();
             DroppedFiles.Clear();
-            if (dropped > 0)
-            {
-                Plugin.Logger.LogDebug($"🧹 Envíos en curso abortados ({dropped} elementos) por cambio de slugcat local: la skin vieja quedó obsoleta.");
-            }
         }
 
         public static void ClearAllTransfers()
@@ -474,7 +443,6 @@ namespace DMSxMeadow
             AbortedIncomingTransfers.Clear();
             SkinPartGuard.ClearAll();
             _nextSendAllowedTime = 0f;
-            Plugin.Logger.LogDebug("🧹 Transferencias pendientes y recepciones incompletas purgadas (sesión terminada).");
         }
 
         private static void OnChunkReceived(OnlinePlayer sender, string skinId, string fileName, byte[] fileBytes, int fileIndex, int totalFiles)
@@ -485,7 +453,6 @@ namespace DMSxMeadow
 
             if (AbortedIncomingTransfers.Contains(transferKey))
             {
-                Plugin.Logger.LogDebug($"Archivo [{fileIndex + 1}/{totalFiles}] '{fileName}' de la transferencia rechazada {transferKey} ignorado (3a estricto).");
                 return;
             }
 
@@ -495,7 +462,6 @@ namespace DMSxMeadow
             }
 
             IncomingTransfers[transferKey][fileName] = fileBytes;
-            Plugin.Logger.LogDebug($"Archivo [{fileIndex + 1}/{totalFiles}] '{fileName}' recibido para skin '{skinId}' desde {sender.id}.");
 
             if (!SkinPartGuard.ValidateIncomingFile(transferKey, fileName, IncomingTransfers[transferKey]))
             {
@@ -505,7 +471,6 @@ namespace DMSxMeadow
 
             if (IncomingTransfers[transferKey].Count >= totalFiles)
             {
-                Plugin.Logger.LogDebug($"📦 Skin completa '{skinId}' recibida de {sender.id}. Registrando en caché...");
                 var completeSkinFiles = IncomingTransfers[transferKey];
 
                 if (!SkinPartGuard.ValidateDeferredAtCompletion(transferKey, completeSkinFiles))

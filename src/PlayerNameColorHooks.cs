@@ -108,7 +108,6 @@ namespace DMSxMeadow
                 Plugin.Logger.LogWarning($"No se pudo enganchar OnlinePlayerDisplay.ctor: {ex.Message}");
             }
 
-            Plugin.Logger.LogDebug("🎨 Sección 'Identity' activa en sesiones de Meadow (color de nombre en chat + nombre flotante + luz de tubería, sync por currentColors de Meadow).");
         }
 
         public static void Dispose()
@@ -343,7 +342,7 @@ namespace DMSxMeadow
                     if (!loggedCtorIdentificationFail)
                     {
                         loggedCtorIdentificationFail = true;
-                        Plugin.Logger.LogDebug($"OnlinePlayerDisplay sin color de identidad (playingAs={customization.playingAs?.value ?? "null"}, currentColors={customization.currentColors?.Count ?? 0}) — se mantiene el color del cuerpo.");
+
                     }
                     return;
                 }
@@ -374,7 +373,7 @@ namespace DMSxMeadow
                 if (!loggedCtorApply)
                 {
                     loggedCtorApply = true;
-                    Plugin.Logger.LogDebug("Color de identidad aplicado al nombre flotante (OnlinePlayerDisplay.ctor).");
+
                 }
             }
             catch (Exception ex)
