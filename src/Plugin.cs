@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace DMSxMeadow
 {
-    [BepInPlugin("dmsxmeadow", "DMSxMeadow", "1.4.4")]
+    [BepInPlugin("dmsxmeadow", "DMSxMeadow", "1.4.5")]
     [BepInDependency("dressmyslugcat", BepInDependency.DependencyFlags.HardDependency)]
     [BepInDependency("henpemaz.rainmeadow", BepInDependency.DependencyFlags.HardDependency)]
     public class Plugin : BaseUnityPlugin
@@ -77,7 +77,7 @@ namespace DMSxMeadow
                 if (isInit) return;
                 isInit = true;
 
-                Plugin.Logger.LogInfo("Build 1.4.4 (01/09/2026: skip de descarga si asignación manual, limpieza de logs para release). Si NO ves esta línea, se está cargando un DLL viejo.");
+                Plugin.Logger.LogInfo("Build 1.4.5 (12/09/2026: sistema de verificación de identificador de skin mas permisivo). Si NO ves esta línea, se está cargando un DLL viejo.");
 
                 MachineConnector.SetRegisteredOI("dmsxmeadow", DMSxMeadowOptions.Instance);
                 DMSxMeadowOptions.Instance.EnsureConfigBound();

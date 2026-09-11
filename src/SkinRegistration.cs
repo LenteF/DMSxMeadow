@@ -23,7 +23,7 @@ namespace DMSxMeadow
         };
 
         private static readonly Regex ValidSkinIdentifierRegex =
-            new Regex("^[a-zA-Z0-9_.-]+$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+            new Regex("^[a-zA-Z0-9_.'-]+$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
         public static bool IsValidSkinIdentifier(string value)
         {
