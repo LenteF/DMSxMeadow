@@ -329,7 +329,7 @@ namespace DMSxMeadow
 
                     if (!SkinRegistration.IsValidSkinIdentifier(skinId) || !SkinRegistration.IsValidSkinIdentifier(fileName))
                     {
-                        Plugin.Logger.LogWarning($"⛔ CustomPacket de skin de {fromPlayer?.id} RECHAZADO: skinId='{skinId}' fileName='{fileName}' no cumplen ^[a-zA-Z0-9_.-]+$.");
+                        Plugin.Logger.LogWarning($"[SkinTransfer] CustomPacket de skin de {fromPlayer?.id} RECHAZADO: skinId='{skinId}' fileName='{fileName}' no cumplen ^[a-zA-Z0-9_.'-]+$.");
                         return;
                     }
 
@@ -364,7 +364,7 @@ namespace DMSxMeadow
             IncomingTransfers.Remove(transferKey);
             AbortedIncomingTransfers.Add(transferKey);
             SkinPartGuard.ForgetTransfer(transferKey);
-            Plugin.Logger.LogWarning($"⛔ Transferencia {transferKey} ABORTADA (rechazo 3a estricto): la skin no se registra y el jugador queda con la skin por defecto.");
+            Plugin.Logger.LogWarning($"[SkinTransfer] Transferencia {transferKey} ABORTADA (rechazo 3a estricto): la skin no se registra y el jugador queda con la skin por defecto.");
         }
 
         public static void ForgetPlayer(OnlinePlayer player)

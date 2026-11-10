@@ -292,7 +292,7 @@ namespace DMSxMeadow
             }
 
             target.InvokeRPC(RPC_RequestHandshake, GetLocalSteamId());
-            Plugin.Logger.LogInfo($"🔄 Handshake re-solicitado a {target.id} tras desbaneo: si su ShareSkin está ON, se descargará su skin.");
+            Plugin.Logger.LogInfo($"Handshake re-solicitado a {target.id} tras desbaneo: si su ShareSkin está ON, se descargará su skin.");
         }
 
         [SoftRPCMethod]
@@ -436,11 +436,11 @@ namespace DMSxMeadow
 
                     Plugin.ScheduleRecreateForSteamId(senderSteamId);
 
-                    if (ReceivedCustomizations.TryGetValue(senderSteamId, out var bySlugcat))
-                    {
-                        var staleKeys = bySlugcat.Keys.Where(k => k != handshake.Slugcat).ToList();
-                        foreach (string staleKey in staleKeys) bySlugcat.Remove(staleKey);
-                    }
+                    // Log each incoming handshake. Do NOT prune other slugcat keys of this
+                    // emitter here: (steamId, slugcat) entries are independent and several
+                    // keys per player are legit (re-realizations, lobby changes, riders);
+                    // pruning here is what let NPC pup handshakes wipe real avatar skins.
+                    Plugin.Logger.LogInfo($"[DIAG/handshake-in] sender={senderSteamId} slugcat={handshake.Slugcat} shareSkin={handshake.ShareSkin} sprites={customization.CustomSprites?.Count ?? 0}");
                 }
 
                 SkinTransfer.ForgetSenderState(sender);
@@ -453,7 +453,7 @@ namespace DMSxMeadow
                         {
                             if (!SkinRegistration.IsValidSkinIdentifier(skinId))
                             {
-                                Plugin.Logger.LogWarning($"⛔ Skin '{skinId}' del handshake de {sender?.id} IGNORADA: no cumple ^[a-zA-Z0-9_.-]+$ (H-3).");
+                                Plugin.Logger.LogWarning($"[Catálogo] Skin '{skinId}' del handshake de {sender?.id} IGNORADA: no cumple ^[a-zA-Z0-9_.'-]+$ (H-3).");
                                 continue;
                             }
 
@@ -501,7 +501,7 @@ namespace DMSxMeadow
 
                 if (!SkinRegistration.IsValidSkinIdentifier(skinId))
                 {
-                    Plugin.Logger.LogWarning($"⛔ RPC_RequestSkin de {requester.id} para '{skinId}' RECHAZADO: skinId no cumple ^[a-zA-Z0-9_.-]+$ (H-3).");
+                    Plugin.Logger.LogWarning($"[RPC] RPC_RequestSkin de {requester.id} para '{skinId}' RECHAZADO: skinId no cumple ^[a-zA-Z0-9_.'-]+$ (H-3).");
                     return;
                 }
 

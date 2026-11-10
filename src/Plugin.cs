@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace DMSxMeadow
 {
-    [BepInPlugin("dmsxmeadow", "DMSxMeadow", "1.4.5")]
+    [BepInPlugin("dmsxmeadow", "DMSxMeadow", "1.4.6")]
     [BepInDependency("dressmyslugcat", BepInDependency.DependencyFlags.HardDependency)]
     [BepInDependency("henpemaz.rainmeadow", BepInDependency.DependencyFlags.HardDependency)]
     public class Plugin : BaseUnityPlugin
@@ -18,10 +18,8 @@ namespace DMSxMeadow
         public static Plugin Instance;
         public static new ManualLogSource Logger;
 
-        // Localization: resolves a dmsxm_ key through the game's InGameTranslator
-        // (mod files: text/text_eng/strings.txt, text/text_spa/strings.txt).
-        // Falls back to the English literal if the key is missing or the game
-        // translator is not ready yet.
+        // Localization: resolves a dmsxm_ key via the game's InGameTranslator
+        // (strings.txt in this mod's text folders); falls back to the English literal.
         public static string Tr(string key, string fallback)
         {
             try
@@ -77,7 +75,7 @@ namespace DMSxMeadow
                 if (isInit) return;
                 isInit = true;
 
-                Plugin.Logger.LogInfo("Build 1.4.5 (12/09/2026: sistema de verificación de identificador de skin mas permisivo). Si NO ves esta línea, se está cargando un DLL viejo.");
+                Plugin.Logger.LogInfo("Build 1.4.6 (09/11/2026: reemplaza a la main 1.4.5; identificador de skin permite apostrofe, fixes slugpups incluidos). Si NO ves esta linea, se esta cargando un DLL viejo.");
 
                 MachineConnector.SetRegisteredOI("dmsxmeadow", DMSxMeadowOptions.Instance);
                 DMSxMeadowOptions.Instance.EnsureConfigBound();
@@ -179,11 +177,23 @@ namespace DMSxMeadow
                 if (playerGraphics?.player == null) return;
 
                 var onlineEntity = playerGraphics.player.abstractCreature.GetOnlineObject();
+
+                // DIAG slugpups: context of every realized PlayerGraphics before the guards.
+                var diagP = playerGraphics.player;
+                Logger.LogInfo($"[DIAG/SLeaser] graphics for slugcat={diagP.slugcatStats.name.value} pup={diagP.isSlugpup} npc={diagP.isNPC} onBack={(diagP.onBack != null ? diagP.onBack.slugcatStats?.name?.value ?? "unknown" : "null")} online={(onlineEntity != null ? (onlineEntity.isMine ? "isMine" : "remote") : "null")}");
+
                 if (onlineEntity == null || !onlineEntity.isMine) return;
+
+                // NPC slugpups can be "isMine" here (NPC ownership migrates to whoever
+                // carries/hosts them in Meadow). Emitting their realization made remote
+                // clients key this player's skin under "Slugpup" and prune the real avatar
+                // skin entry. NPCs do not own an avatar skin; never emit.
+                if (diagP.isNPC) return;
 
                 if (OnlineManager.lobby == null || !OnlineManager.lobby.isAvailable) return;
 
                 string slugcatName = playerGraphics.player.slugcatStats.name.value;
+                Logger.LogInfo($"[DIAG/SLeaser] EMIT handshake slugcat={slugcatName}");
                 SkinSerializer.BroadcastHandshake(slugcatName);
             }
             catch (Exception ex)
@@ -554,6 +564,27 @@ namespace DMSxMeadow
         {
             try
             {
+                // NPC slugpups online are world NPCs, not player characters. They must not
+                // resolve through the local DMS save: DMS forces a "Slugpup" entry in every
+                // save, so that local entry would leak onto the NPC pup when the online map
+                // entry is temporarily unavailable (e.g. around shortcut crossings).
+                // Default look instead. Pups played by a human (isNPC == false) are unaffected.
+                if (player?.abstractCreature != null &&
+                    player.isSlugpup && player.isNPC &&
+                    RainMeadow.OnlineManager.lobby != null)
+                {
+                    if (DefaultSkinDebugLogged.Add("npcpup|clean"))
+                    {
+                        Logger.LogInfo("[DIAG/Custom.For] NPC slugpup in online session -> default look (no local save reads)");
+                    }
+
+                    return new DressMySlugcat.Customization
+                    {
+                        Slugcat = player.slugcatStats.name.value,
+                        PlayerNumber = 0
+                    };
+                }
+
                 if (player?.abstractCreature != null)
                 {
                     if (RainMeadow.OnlinePhysicalObject.map.TryGetValue(
@@ -586,10 +617,11 @@ namespace DMSxMeadow
                             {
                                 if (DefaultSkinDebugLogged.Add("banned|" + steamId + "|" + slugcatName))
                                 {
+                                    Logger.LogInfo($"[DIAG/Custom.For] BANNED → default: steamId={steamId} slugcat={slugcatName}");
                                 }
 
-                                // Strip only the custom skin parts, keep the tail geometry: changing tail
-                                // size mid-game makes the tail sprite stick and stretch abnormally.
+                                // Strip custom sprites only, keep tail geometry: resizing the
+                                // tail mid-game makes its sprite stick and stretch abnormally.
                                 var bannedCustomization = MeadowProfileManager.GetCustomizationBySteamID(steamId, slugcatName);
                                 if (bannedCustomization == null)
                                 {
@@ -631,6 +663,7 @@ namespace DMSxMeadow
                             {
                                 if (DefaultSkinDebugLogged.Add(steamId + "|" + slugcatName))
                                 {
+                                    Logger.LogInfo($"[DIAG/Custom.For] REMOTE sin skin recibida → default: steamId={steamId} slugcat={slugcatName}");
                                 }
                                 var clean = new DressMySlugcat.Customization
                                 {
@@ -644,6 +677,7 @@ namespace DMSxMeadow
                             {
                                 if (DefaultSkinDebugLogged.Add("local-clean|" + slugcatName))
                                 {
+                                    Logger.LogInfo($"[DIAG/Custom.For] LOCAL isMine sin save-DMS → default: slugcat={slugcatName} playerNumber={player.playerState?.playerNumber}");
                                 }
                                 var clean = new DressMySlugcat.Customization
                                 {
@@ -669,6 +703,7 @@ namespace DMSxMeadow
                 {
                     if (DefaultSkinDebugLogged.Add("fallback-clean|" + player.slugcatStats.name.value))
                     {
+                        Logger.LogInfo($"[DIAG/Custom.For] FALLBACK sin owner online → default: slugcat={player.slugcatStats.name.value} playerNumber={player.playerState?.playerNumber}");
                     }
                     return new DressMySlugcat.Customization
                     {

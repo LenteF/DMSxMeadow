@@ -69,17 +69,17 @@ namespace DMSxMeadow
                         bool nowBanned = SkinBanManager.ToggleBan(steamId, displayName);
                         if (nowBanned)
                         {
-                            // Do NOT purge the received customization: the banned slug renders with a
-                            // default skin but keeps its tail geometry. Changing tail size mid-game makes
-                            // the tail sprite stick and stretch abnormally (reported bug).
+                            // Do NOT purge the received customization: the banned slug renders
+                            // with a default skin but keeps tail geometry (resizing the tail
+                            // mid-game makes its sprite stick and stretch abnormally).
                             SkinTransfer.ForgetPlayer(playerButton.player);
                             SkinRegistration.ForgetSender(steamId);
                             Plugin.ScheduleRecreateForSteamId(steamId);
-                            Plugin.Logger.LogInfo($"🚫 Skin de '{displayName}' ({steamId}) BANEADA localmente (permanente en blacklist.txt). Su skin ya no se descarga ni se aplica (la cola se conserva).");
+                            Plugin.Logger.LogInfo($"[Ban] Skin de '{displayName}' ({steamId}) BANEADA localmente (permanente en blacklist.txt). Su skin ya no se descarga ni se aplica (la cola se conserva).");
                         }
                         else
                         {
-                            Plugin.Logger.LogInfo($"✅ Skin de '{displayName}' ({steamId}) desbaneada. Solicitando re-handshake...");
+                            Plugin.Logger.LogInfo($"Skin de '{displayName}' ({steamId}) desbaneada. Solicitando re-handshake...");
                             SkinSerializer.RequestHandshakeFrom(steamId);
                         }
 

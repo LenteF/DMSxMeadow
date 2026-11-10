@@ -147,7 +147,7 @@ namespace DMSxMeadow
                 var sheet = BuildSpriteSheet(renamedId, files);
                 if (sheet == null)
                 {
-                    Plugin.Logger.LogWarning($"⚠️ Skin '{skinId}' de {senderSteamId}: no se pudo construir el SpriteSheet en memoria (archivos incompletos). Skin por defecto (RNF-3).");
+                    Plugin.Logger.LogWarning($"[SkinRegistration] Skin '{skinId}' de {senderSteamId}: no se pudo construir el SpriteSheet en memoria (archivos incompletos). Skin por defecto (RNF-3).");
                     return false;
                 }
 
@@ -375,7 +375,7 @@ namespace DMSxMeadow
             catch (Exception ex)
             {
                 string inner = ex.InnerException != null ? $" => {ex.InnerException.Message}" : "";
-                Plugin.Logger.LogWarning($"⛔ Parte '{pngName}' rechazada: {ex.Message}{inner}");
+                Plugin.Logger.LogWarning($"[SkinRegistration] Parte '{pngName}' rechazada: {ex.Message}{inner}");
                 if (atlas != null)
                 {
                     if (Futile.atlasManager.DoesContainAtlas(atlasName))
@@ -553,7 +553,7 @@ namespace DMSxMeadow
             string skinFolder = FindSkinDirectoryOnDisk(skinId);
             if (string.IsNullOrEmpty(skinFolder) || !Directory.Exists(skinFolder))
             {
-                Plugin.Logger.LogError($"❌ No se encontró la carpeta física de la skin '{skinId}' en los mods.");
+                Plugin.Logger.LogError($"No se encontró la carpeta física de la skin '{skinId}' en los mods.");
                 return files;
             }
 
@@ -679,7 +679,7 @@ namespace DMSxMeadow
                 }
             }
 
-            Plugin.Logger.LogError($"❌ No se encontró la carpeta física para la skin '{skinId}' ni en local ni en Workshop.");
+            Plugin.Logger.LogError($"No se encontró la carpeta física para la skin '{skinId}' ni en local ni en Workshop.");
             return null;
         }
 

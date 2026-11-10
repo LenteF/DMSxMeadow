@@ -582,7 +582,7 @@ _onlineTab = new OpTab(this, Plugin.Tr("dmsxm_tab_online", ONLINE_TAB_NAME));
                 bool removed = SkinBanManager.RemoveBan(identity);
                 if (removed)
                 {
-                    Plugin.Logger.LogInfo($"🚫 {identity} quitada de la lista negra (desbaneado). Solicitando re-handshake...");
+                    Plugin.Logger.LogInfo($"{identity} quitada de la lista negra (desbaneado). Solicitando re-handshake...");
                     SkinSerializer.RequestHandshakeFrom(identity);
                 }
                 RefreshBannedList();

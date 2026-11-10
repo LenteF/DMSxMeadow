@@ -73,24 +73,11 @@ namespace DMSxMeadow
                 // ============================================================
                 // POSICIONAMIENTO RESPONSIVO A RESOLUCIÓN
                 // ============================================================
-                // ============================================================
                 float baseStartX = textBoxBorder.pos.x + (65f * playerCount) + 10f;
-
-                // ============================================================
-                // LIMITACIÓN DE SEGURIDAD
-                // ============================================================
                 float maxSafeX = textBoxBorder.pos.x + textBoxBorder.size.x - 260f;
                 baseStartX = Mathf.Min(baseStartX, maxSafeX);
-
-                // ============================================================
-                // AJUSTE GENERAL DE POSICIÓN (X)
-                // ============================================================
                 float positionOffsetX = -10f;
                 baseStartX += positionOffsetX;
-
-                // ============================================================
-                // FILA PROPIA: Y = -80f
-                // ============================================================
                 float baseYPos = textBoxBorder.pos.y - 75f;
 
                 // ============================================================
@@ -115,15 +102,7 @@ namespace DMSxMeadow
                 _fancyMenu.pages[0].subObjects.Add(_meadowModeButton);
 
                 float yOffset = 0f;
-
-                // ============================================================
-                // AJUSTE DE POSICIÓN SOLO SECCIÓN (Y)
-                // ============================================================
                 float sectionOffsetY = 25f;
-
-                // ============================================================
-                // AJUSTE DE POSICIÓN SOLO SECCIÓN (X)
-                // ============================================================
                 float sectionOffsetX = 12f;
 
                 _profileLabel = new MenuLabel(
